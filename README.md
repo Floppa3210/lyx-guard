@@ -98,6 +98,13 @@ Ver:
 node tools/qa/check_events.js
 ```
 
+## Docs
+- Pack parity (comparativa, no SaaS): `docs/pack_parity/PACK_PARITY_PASS1.md`
+- Evidencia tecnica: `docs/pack_parity/PACK_PARITY_PASS2.md`
+- Brechas/riesgos: `docs/pack_parity/PACK_PARITY_PASS3.md`
+- Plan de cierre: `docs/pack_parity/PACK_PARITY_PASS4.md`
+- Perfil produccion alta carga: `docs/operations/PRODUCCION_ALTA_CARGA.md`
+
 ## Roadmap
 - Usar Issues/PRs del repo para el backlog y el progreso.
 
