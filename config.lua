@@ -94,7 +94,9 @@ Config.ProfilePresets = {
                 lyxguard_panel_event_token = 120000,
                 lyxguard_panel_event_replay = 180000,
                 lyxguard_panel_event_spoof = 120000,
-                txadmin_event_spoof = 180000
+                txadmin_event_spoof = 180000,
+                restricted_event_spoof = 90000,
+                restricted_event_spoof_high = 180000
             }
         },
 
@@ -164,7 +166,9 @@ Config.ProfilePresets = {
                 lyxguard_panel_event_token = 90000,
                 lyxguard_panel_event_replay = 120000,
                 lyxguard_panel_event_spoof = 90000,
-                txadmin_event_spoof = 120000
+                txadmin_event_spoof = 120000,
+                restricted_event_spoof = 70000,
+                restricted_event_spoof_high = 120000
             }
         },
 
@@ -234,7 +238,9 @@ Config.ProfilePresets = {
                 lyxguard_panel_event_token = 30000,
                 lyxguard_panel_event_replay = 45000,
                 lyxguard_panel_event_spoof = 30000,
-                txadmin_event_spoof = 45000
+                txadmin_event_spoof = 45000,
+                restricted_event_spoof = 20000,
+                restricted_event_spoof_high = 45000
             },
             strikeWeights = {
                 lyxpanel_admin_event_spoof = 2,
@@ -244,6 +250,8 @@ Config.ProfilePresets = {
                 lyxguard_panel_event_token = 2,
                 lyxguard_panel_event_replay = 3,
                 txadmin_event_spoof = 3,
+                restricted_event_spoof = 2,
+                restricted_event_spoof_high = 3,
                 lyxpanel_admin_event_not_allowlisted = 2,
                 lyxpanel_admin_event_schema = 2,
                 blacklisted_event = 2
@@ -325,6 +333,8 @@ Config.Risk = {
         lyxguard_panel_event_replay = 260,
         lyxguard_panel_event_spoof = 220,
         txadmin_event_spoof = 260,
+        restricted_event_spoof = 120,
+        restricted_event_spoof_high = 240,
         honeypot_command = 260,
         burst_pattern = 45,
     },
@@ -429,6 +439,8 @@ Config.Quarantine = {
         lyxguard_panel_event_replay = true,
         lyxguard_panel_event_spoof = true,
         txadmin_event_spoof = true,
+        restricted_event_spoof = true,
+        restricted_event_spoof_high = true,
         honeypot_command = true,
         burst_pattern = true,
         blacklisted_event = true,
@@ -470,6 +482,8 @@ Config.Quarantine = {
         lyxguard_panel_event_replay = 120000,
         lyxguard_panel_event_spoof = 60000,
         txadmin_event_spoof = 120000,
+        restricted_event_spoof = 60000,
+        restricted_event_spoof_high = 120000,
         honeypot_command = 120000,
         burst_pattern = 45000
     }
@@ -487,6 +501,21 @@ Config.TriggerProtection = {
 
     -- Scale per-event spam thresholds globally (applied to SpamCheckedEvents maxAllowed).
     spamScale = 5.0,
+
+    -- Baseline adaptativo por carga real del servidor.
+    -- Ajusta el spamScale segun jugadores conectados y franja horaria.
+    adaptiveBaseline = {
+        enabled = true,
+        useUtc = false,
+        basePlayers = 32,
+        playerStep = 16,
+        maxPlayerBonus = 2.0,
+        peakStartHour = 18,
+        peakEndHour = 23,
+        peakMultiplier = 1.15,
+        offPeakMultiplier = 1.0,
+        maxScale = 12.0
+    },
 
     -- Avoid repeated suspicious flags every tick once a threshold is exceeded.
     spamFlagCooldownMs = 7000,
@@ -627,6 +656,171 @@ Config.TriggerProtection = {
         'mellotrainer:adminKick',
         'hentailover:xdlol',
         'gcPhone:_internalAddMessage'
+    },
+
+    -- Sensitive events with explicit allow-rules.
+    -- Unlike blacklistedEvents, these can define allowed jobs/groups/ACE and
+    -- optional punishment policy per event.
+    restrictedEvents = {
+        -- Revive endpoints (allow medics + panel/guard staff).
+        ['esx_ambulancejob:revive'] = {
+            allowJobs = { 'ambulance', 'ems', 'paramedic' },
+            allowGroups = { 'superadmin', 'admin', 'mod', 'helper', 'master', 'owner' },
+            allowPermissionLevels = { 'full', 'vip' },
+            punish = false,
+            detection = 'restricted_event_spoof',
+            reason = 'Revive no autorizado bloqueado'
+        },
+        ['paramedic:revive'] = {
+            allowJobs = { 'ambulance', 'ems', 'paramedic' },
+            allowGroups = { 'superadmin', 'admin', 'mod', 'helper', 'master', 'owner' },
+            allowPermissionLevels = { 'full', 'vip' },
+            punish = false,
+            detection = 'restricted_event_spoof',
+            reason = 'Revive no autorizado bloqueado'
+        },
+        ['ems:revive'] = {
+            allowJobs = { 'ambulance', 'ems', 'paramedic' },
+            allowGroups = { 'superadmin', 'admin', 'mod', 'helper', 'master', 'owner' },
+            allowPermissionLevels = { 'full', 'vip' },
+            punish = false,
+            detection = 'restricted_event_spoof',
+            reason = 'Revive no autorizado bloqueado'
+        },
+
+        -- High confidence cheat signatures.
+        ['adminmenu:allowall'] = {
+            punish = true,
+            detection = 'restricted_event_spoof_high',
+            reason = 'Admin event malicioso detectado'
+        },
+        ['adminmenu:setsalary'] = {
+            punish = true,
+            detection = 'restricted_event_spoof_high',
+            reason = 'Admin event malicioso detectado'
+        },
+        ['adminmenu:giveDirtyMoney'] = {
+            punish = true,
+            detection = 'restricted_event_spoof_high',
+            reason = 'Admin event malicioso detectado'
+        },
+        ['adminmenu:giveBank'] = {
+            punish = true,
+            detection = 'restricted_event_spoof_high',
+            reason = 'Admin event malicioso detectado'
+        },
+        ['adminmenu:giveCash'] = {
+            punish = true,
+            detection = 'restricted_event_spoof_high',
+            reason = 'Admin event malicioso detectado'
+        },
+        ['mellotrainer:adminKick'] = {
+            punish = true,
+            detection = 'restricted_event_spoof_high',
+            reason = 'Trainer event malicioso detectado'
+        },
+        ['mellotrainer:adminTempBan'] = {
+            punish = true,
+            detection = 'restricted_event_spoof_high',
+            reason = 'Trainer event malicioso detectado'
+        },
+        ['banfuncReturnTruzz:banac'] = {
+            punish = true,
+            detection = 'restricted_event_spoof_high',
+            reason = 'Intento de ban remoto malicioso detectado'
+        },
+        ['hcheat:tempDisableDetection'] = {
+            punish = true,
+            detection = 'restricted_event_spoof_high',
+            reason = 'Intento de desactivar detecciones detectado'
+        },
+        ['AntiLynx8:anticheat'] = {
+            punish = true,
+            detection = 'restricted_event_spoof_high',
+            reason = 'Firma AntiLynx detectada'
+        },
+        ['AntiLynx8R4A:anticheat'] = {
+            punish = true,
+            detection = 'restricted_event_spoof_high',
+            reason = 'Firma AntiLynx detectada'
+        },
+        ['AntiLynxR6:detection'] = {
+            punish = true,
+            detection = 'restricted_event_spoof_high',
+            reason = 'Firma AntiLynx detectada'
+        },
+        ['AntiLynxR4:detect'] = {
+            punish = true,
+            detection = 'restricted_event_spoof_high',
+            reason = 'Firma AntiLynx detectada'
+        },
+        ['AntiLynxR4:kick'] = {
+            punish = true,
+            detection = 'restricted_event_spoof_high',
+            reason = 'Firma AntiLynx detectada'
+        },
+        ['ynx8:anticheat'] = {
+            punish = true,
+            detection = 'restricted_event_spoof_high',
+            reason = 'Firma YNX/Lynx detectada'
+        },
+        ['lynx8:anticheat'] = {
+            punish = true,
+            detection = 'restricted_event_spoof_high',
+            reason = 'Firma YNX/Lynx detectada'
+        },
+        ['js:jailuser'] = {
+            punish = true,
+            detection = 'restricted_event_spoof_high',
+            reason = 'Evento de menu malicioso (jailuser) detectado'
+        },
+        ['js:jadfwmiluser'] = {
+            punish = true,
+            detection = 'restricted_event_spoof_high',
+            reason = 'Evento ofuscado (dfwm) detectado'
+        },
+        ['xk3ly-barbasz:getfukingmony'] = {
+            punish = true,
+            detection = 'restricted_event_spoof_high',
+            reason = 'Money exploit conocido detectado'
+        },
+        ['xk3ly-farmer:paycheck'] = {
+            punish = true,
+            detection = 'restricted_event_spoof_high',
+            reason = 'Money exploit conocido detectado'
+        },
+
+        -- Privileged ESX mutations.
+        ['esx:setJob'] = {
+            allowPermissionLevels = { 'full' },
+            punish = false,
+            detection = 'restricted_event_spoof',
+            reason = 'Mutacion de job no autorizada'
+        },
+        ['esx_society:setJob'] = {
+            allowPermissionLevels = { 'full' },
+            punish = false,
+            detection = 'restricted_event_spoof',
+            reason = 'Mutacion de job no autorizada'
+        },
+        ['esx_society:setJobSalary'] = {
+            allowPermissionLevels = { 'full' },
+            punish = false,
+            detection = 'restricted_event_spoof',
+            reason = 'Cambio de salario no autorizado'
+        },
+        ['NB:recruterplayer'] = {
+            allowPermissionLevels = { 'full' },
+            punish = true,
+            detection = 'restricted_event_spoof_high',
+            reason = 'Reclutamiento no autorizado detectado'
+        },
+        ['NB:destituerplayer'] = {
+            allowPermissionLevels = { 'full' },
+            punish = true,
+            detection = 'restricted_event_spoof_high',
+            reason = 'Destitucion no autorizada detectada'
+        }
     }
 }
 
@@ -727,6 +921,13 @@ Config.BanHardening = {
 
     -- Fallback scan size for DB engines without JSON_OVERLAPS.
     tokenHashScanLimit = 3000,
+
+    -- Token match must be supported by at least N identifier matches (license/steam/discord/fivem).
+    -- Helps avoid false positives while still catching ban evasion.
+    minIdentifierMatchesOnTokenMatch = 1,
+
+    -- Minimum token hash overlap for hash-based ban hits.
+    minTokenHashMatches = 1,
 
     -- Keep compatibility with legacy bans that only stored raw `tokens`.
     legacyTokenLikeFallback = true

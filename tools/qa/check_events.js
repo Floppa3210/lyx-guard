@@ -38,19 +38,109 @@ function extractRegisterNetEvents(luaText) {
   return out;
 }
 
-function extractAllowlistKeys(luaText) {
+function extractLuaTableBlock(luaText, tableName) {
+  // Minimal Lua table extractor for `local <name> = { ... }`.
+  const re = new RegExp(`\\b${tableName}\\b\\s*=\\s*{`);
+  const m = re.exec(luaText);
+  if (!m) return null;
+
+  let i = m.index + m[0].length - 1;
+  let depth = 0;
+  let start = -1;
+  let end = -1;
+
+  let inSingle = false;
+  let inDouble = false;
+  let inLineComment = false;
+  let inBlockComment = false;
+
+  for (; i < luaText.length; i++) {
+    const ch = luaText[i];
+    const next = i + 1 < luaText.length ? luaText[i + 1] : "";
+    const next2 = i + 2 < luaText.length ? luaText[i + 2] : "";
+    const next3 = i + 3 < luaText.length ? luaText[i + 3] : "";
+
+    if (inLineComment) {
+      if (ch === "\n") inLineComment = false;
+      continue;
+    }
+    if (inBlockComment) {
+      if (ch === "]" && next === "]") {
+        inBlockComment = false;
+        i++;
+      }
+      continue;
+    }
+    if (inSingle) {
+      if (ch === "\\") {
+        i++;
+        continue;
+      }
+      if (ch === "'") inSingle = false;
+      continue;
+    }
+    if (inDouble) {
+      if (ch === "\\") {
+        i++;
+        continue;
+      }
+      if (ch === '"') inDouble = false;
+      continue;
+    }
+
+    if (ch === "-" && next === "-") {
+      if (next2 === "[" && next3 === "[") {
+        inBlockComment = true;
+        i += 3;
+      } else {
+        inLineComment = true;
+        i++;
+      }
+      continue;
+    }
+    if (ch === "'") {
+      inSingle = true;
+      continue;
+    }
+    if (ch === '"') {
+      inDouble = true;
+      continue;
+    }
+
+    if (ch === "{") {
+      if (depth === 0) start = i;
+      depth++;
+      continue;
+    }
+    if (ch === "}") {
+      depth--;
+      if (depth === 0) {
+        end = i;
+        break;
+      }
+      continue;
+    }
+  }
+
+  if (start === -1 || end === -1) return null;
+  return luaText.slice(start, end + 1);
+}
+
+function extractAllowlistKeysFromBlock(luaBlockText) {
   const out = new Set();
+  if (!luaBlockText) return out;
   const re = /\[['"]([^'"]+)['"]\]\s*=\s*true/g;
   let m;
-  while ((m = re.exec(luaText))) out.add(m[1]);
+  while ((m = re.exec(luaBlockText))) out.add(m[1]);
   return out;
 }
 
-function extractSchemaKeys(luaText) {
+function extractTableKeysFromBlock(luaBlockText) {
   const out = new Set();
+  if (!luaBlockText) return out;
   const re = /\[['"]([^'"]+)['"]\]\s*=\s*{\s*/g;
   let m;
-  while ((m = re.exec(luaText))) out.add(m[1]);
+  while ((m = re.exec(luaBlockText))) out.add(m[1]);
   return out;
 }
 
@@ -70,8 +160,15 @@ function main() {
   }
 
   const tpTxt = readText(tpPath);
-  const allowlist = extractAllowlistKeys(tpTxt);
-  const schemas = extractSchemaKeys(tpTxt);
+  const allowlistBlock = extractLuaTableBlock(tpTxt, "AllowedLyxGuardEvents");
+  const coreSchemasBlock = extractLuaTableBlock(tpTxt, "_GuardCoreDefaultSchemas");
+  const panelSchemasBlock = extractLuaTableBlock(tpTxt, "_GuardPanelDefaultSchemas");
+
+  const allowlist = extractAllowlistKeysFromBlock(allowlistBlock);
+  const schemas = new Set([
+    ...extractTableKeysFromBlock(coreSchemasBlock),
+    ...extractTableKeysFromBlock(panelSchemasBlock),
+  ]);
 
   const critical = [...registered].filter(
     (e) => e.startsWith("lyxguard:panel:") || e === "lyxguard:heartbeat"
@@ -108,4 +205,3 @@ function main() {
 }
 
 main();
-

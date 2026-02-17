@@ -72,7 +72,7 @@ flowchart LR
 
 ## Modelo de seguridad
 - Toda decision critica vive en servidor.
-- El cliente aporta señales y verificacion auxiliar.
+- El cliente aporta senales y verificacion auxiliar.
 - Eventos anomales de alto riesgo se bloquean antes del handler final.
 - Se evitan rutas dinamicas peligrosas (`load`, `loadstring`, exec remoto).
 
@@ -82,7 +82,7 @@ flowchart LR
 
 ## Si queres aportar
 Contribuciones tecnicas bienvenidas:
-1. Priorizá cambios pequeños y medibles.
+1. Prioriza cambios pequenos y medibles.
 2. Si agregas deteccion, inclui:
    - calibracion de umbral
    - metadatos de log
@@ -93,8 +93,13 @@ Ver:
 - `CONTRIBUTING.md`
 - `SECURITY.md`
 
-## Roadmap y contexto
-- Roadmap conversacional principal: `../README_ROADMAP_CONVERSACION.md`
+## QA offline (recomendado antes de release)
+```bash
+node tools/qa/check_events.js
+```
+
+## Roadmap
+- Usar Issues/PRs del repo para el backlog y el progreso.
 
 ## Checklist de release recomendado
 - Perfiles revisados (`rp_light`, `production_high_load`, `hostile`)

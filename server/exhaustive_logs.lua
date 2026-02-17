@@ -16,6 +16,9 @@ local RESOURCE_NAME = GetCurrentResourceName()
 local DEFAULT_CFG = {
     enabled = true,
     directory = 'logs',
+    evidenceEnabled = true,
+    evidenceDirectory = 'logs/evidence',
+    evidenceTimelineSeconds = 300,
     flushIntervalMs = 2000,
     flushBatchSize = 30,
     maxFileBytes = 2 * 1024 * 1024,
@@ -85,6 +88,14 @@ local function _BuildCorrelationId()
     _EnsureRandomSeed()
     local ms = _NowMs()
     return ('lgx-%d-%06d'):format(ms, math.random(100000, 999999))
+end
+
+local function _BuildEvidenceFilePath()
+    _EnsureRandomSeed()
+    local dir = tostring((State.cfg and State.cfg.evidenceDirectory) or 'logs/evidence')
+    local stamp = os.date('!%Y%m%d_%H%M%S')
+    local suffix = math.random(100000, 999999)
+    return ('%s/evidence_%s_%d.json'):format(dir, stamp, suffix)
 end
 
 local function _NormalizeLevel(level)
@@ -540,6 +551,51 @@ function ExhaustiveLogs.GetCurrentFiles()
     }
 end
 
+function ExhaustiveLogs.CreateEvidencePack(sourceOrIdentifier, opts)
+    opts = type(opts) == 'table' and opts or {}
+    local enabled = not (State.cfg and State.cfg.evidenceEnabled == false)
+    if not enabled then
+        return false, 'evidence_disabled'
+    end
+
+    local identifier = nil
+    local source = tonumber(sourceOrIdentifier)
+    if source and source > 0 then
+        identifier = _ResolveIdentifierFromSource(source)
+    else
+        identifier = _NormalizeString(sourceOrIdentifier, 128)
+    end
+    if not identifier or identifier == '' then
+        return false, 'invalid_identifier'
+    end
+
+    local timelineSeconds = tonumber(opts.timelineSeconds) or (State.cfg and State.cfg.evidenceTimelineSeconds) or 300
+    if timelineSeconds < 30 then timelineSeconds = 30 end
+    if timelineSeconds > 1800 then timelineSeconds = 1800 end
+
+    local payload = {
+        generated_at = _UtcIso(),
+        correlation_id = _NormalizeString(opts.correlation_id, 128) or _BuildCorrelationId(),
+        identifier = identifier,
+        source = source,
+        reason = _NormalizeString(opts.reason, 300),
+        action = _NormalizeString(opts.action, 80),
+        detection_type = _NormalizeString(opts.detection_type, 80),
+        metadata = type(opts.metadata) == 'table' and opts.metadata or {},
+        timeline_seconds = timelineSeconds,
+        timeline = ExhaustiveLogs.GetTimeline(identifier, timelineSeconds)
+    }
+
+    local path = _BuildEvidenceFilePath()
+    local encoded = _SafeJsonEncode(payload)
+    local ok = _WriteResourceText(path, encoded)
+    if ok ~= true then
+        return false, 'save_failed'
+    end
+
+    return true, path
+end
+
 function ExhaustiveLogs.FlushNow()
     _FlushQueue()
     return true
@@ -590,6 +646,10 @@ exports('FlushExhaustiveLogs', function()
     return ExhaustiveLogs.FlushNow()
 end)
 
+exports('CreateEvidencePack', function(sourceOrIdentifier, opts)
+    return ExhaustiveLogs.CreateEvidencePack(sourceOrIdentifier, opts)
+end)
+
 _G.LyxGuardPushExhaustiveLog = function(entry)
     return ExhaustiveLogs.Push(entry)
 end
@@ -600,6 +660,10 @@ end
 
 _G.LyxGuardGetPlayerTimeline = function(sourceOrIdentifier, seconds)
     return ExhaustiveLogs.GetTimeline(sourceOrIdentifier, seconds)
+end
+
+_G.LyxGuardCreateEvidencePack = function(sourceOrIdentifier, opts)
+    return ExhaustiveLogs.CreateEvidencePack(sourceOrIdentifier, opts)
 end
 
 _Init()

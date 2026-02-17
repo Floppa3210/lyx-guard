@@ -22,6 +22,8 @@ local function _GetHardeningCfg()
         enableIdentifierFingerprint = cfg.enableIdentifierFingerprint ~= false,
         tokenHashScanLimit = math.max(tonumber(cfg.tokenHashScanLimit) or 3000, 200),
         legacyTokenLikeFallback = cfg.legacyTokenLikeFallback ~= false,
+        minIdentifierMatchesOnTokenMatch = math.max(tonumber(cfg.minIdentifierMatchesOnTokenMatch) or 1, 0),
+        minTokenHashMatches = math.max(tonumber(cfg.minTokenHashMatches) or 1, 1),
     }
 end
 
@@ -132,6 +134,42 @@ local function _HasTokenHashMatch(candidateJson, lookup)
         end
     end
     return false
+end
+
+local function _CountTokenHashMatches(candidateJson, lookup)
+    if type(candidateJson) ~= 'string' or candidateJson == '' then return 0 end
+    if type(lookup) ~= 'table' then return 0 end
+
+    local ok, parsed = pcall(json.decode, candidateJson)
+    if not ok or type(parsed) ~= 'table' then
+        return 0
+    end
+
+    local count = 0
+    for _, h in ipairs(parsed) do
+        local key = tostring(h or '')
+        if key ~= '' and lookup[key] then
+            count = count + 1
+        end
+    end
+    return count
+end
+
+local function _CountIdentifierMatches(identifiers, banRow)
+    if type(identifiers) ~= 'table' or type(banRow) ~= 'table' then
+        return 0
+    end
+
+    local matches = 0
+    local keys = { 'license', 'steam', 'discord', 'fivem' }
+    for _, key in ipairs(keys) do
+        local a = _NormalizeIdentifier(identifiers[key])
+        local b = _NormalizeIdentifier(banRow[key])
+        if a and b and a == b then
+            matches = matches + 1
+        end
+    end
+    return matches
 end
 
 -- 
@@ -567,6 +605,15 @@ function BanSystem.CheckPlayerBan(source)
 
         if overlapsOk and tokenResult and tokenResult[1] then
             local ban = tokenResult[1]
+            local tokenMatches = _CountTokenHashMatches(ban.token_hashes, tokenHashLookup)
+            local idMatches = _CountIdentifierMatches(identifiers, ban)
+            if tokenMatches < hardening.minTokenHashMatches or idMatches < hardening.minIdentifierMatchesOnTokenMatch then
+                tokenResult = nil
+            end
+        end
+
+        if tokenResult and tokenResult[1] then
+            local ban = tokenResult[1]
             if _IsBanExpired(ban) then
                 _TryDeactivateExpiredBan(ban)
                 return false, nil
@@ -584,12 +631,18 @@ function BanSystem.CheckPlayerBan(source)
 
         for _, row in ipairs(hashRows or {}) do
             if _HasTokenHashMatch(row.token_hashes, tokenHashLookup) then
+                local tokenMatches = _CountTokenHashMatches(row.token_hashes, tokenHashLookup)
+                local idMatches = _CountIdentifierMatches(identifiers, row)
+                if tokenMatches < hardening.minTokenHashMatches or idMatches < hardening.minIdentifierMatchesOnTokenMatch then
+                    goto continue_rows
+                end
                 if _IsBanExpired(row) then
                     _TryDeactivateExpiredBan(row)
                     return false, nil
                 end
                 return true, row
             end
+            ::continue_rows::
         end
     end
 
@@ -605,12 +658,17 @@ function BanSystem.CheckPlayerBan(source)
 
             if tokenResult and tokenResult[1] then
                 local ban = tokenResult[1]
+                local idMatches = _CountIdentifierMatches(identifiers, ban)
+                if idMatches < hardening.minIdentifierMatchesOnTokenMatch then
+                    goto continue_legacy_tokens
+                end
                 if _IsBanExpired(ban) then
                     _TryDeactivateExpiredBan(ban)
                     return false, nil
                 end
                 return true, ban
             end
+            ::continue_legacy_tokens::
         end
     end
     

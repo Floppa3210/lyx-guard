@@ -72,6 +72,494 @@ end
 _MergeConfigBlacklistedEvents()
 
 -- ---------------------------------------------------------------------------
+-- RESTRICTED EVENTS (sensitive events often abused by executors)
+-- ---------------------------------------------------------------------------
+
+local RestrictedEventDefaults = {
+    -- High-confidence cheat/admin backdoor events.
+    ['adminmenu:allowall'] = {
+        block = true,
+        punish = true,
+        detection = 'restricted_event_spoof_high',
+        reason = 'Evento adminmenu malicioso bloqueado',
+        allowPanelAccess = true,
+        allowGuardPanelAccess = true,
+    },
+    ['adminmenu:setsalary'] = {
+        block = true,
+        punish = true,
+        detection = 'restricted_event_spoof_high',
+        reason = 'Evento adminmenu malicioso bloqueado',
+        allowPanelAccess = true,
+        allowGuardPanelAccess = true,
+    },
+    ['adminmenu:givedirtymoney'] = {
+        block = true,
+        punish = true,
+        detection = 'restricted_event_spoof_high',
+        reason = 'Evento adminmenu malicioso bloqueado',
+        allowPanelAccess = true,
+        allowGuardPanelAccess = true,
+    },
+    ['adminmenu:givebank'] = {
+        block = true,
+        punish = true,
+        detection = 'restricted_event_spoof_high',
+        reason = 'Evento adminmenu malicioso bloqueado',
+        allowPanelAccess = true,
+        allowGuardPanelAccess = true,
+    },
+    ['adminmenu:givecash'] = {
+        block = true,
+        punish = true,
+        detection = 'restricted_event_spoof_high',
+        reason = 'Evento adminmenu malicioso bloqueado',
+        allowPanelAccess = true,
+        allowGuardPanelAccess = true,
+    },
+    ['mellotrainer:adminkick'] = {
+        block = true,
+        punish = true,
+        detection = 'restricted_event_spoof_high',
+        reason = 'Evento de trainer bloqueado',
+        allowPanelAccess = true,
+        allowGuardPanelAccess = true,
+    },
+    ['mellotrainer:admintempban'] = {
+        block = true,
+        punish = true,
+        detection = 'restricted_event_spoof_high',
+        reason = 'Evento de trainer bloqueado',
+        allowPanelAccess = true,
+        allowGuardPanelAccess = true,
+    },
+    ['hentailover:xdlol'] = {
+        block = true,
+        punish = true,
+        detection = 'restricted_event_spoof_high',
+        reason = 'Evento de cheat conocido bloqueado',
+        allowPanelAccess = true,
+        allowGuardPanelAccess = true,
+    },
+    ['banfuncreturntruzz:banac'] = {
+        block = true,
+        punish = true,
+        detection = 'restricted_event_spoof_high',
+        reason = 'Evento de ban remoto malicioso bloqueado',
+        allowPanelAccess = true,
+        allowGuardPanelAccess = true,
+    },
+    ['hcheat:tempdisabledetection'] = {
+        block = true,
+        punish = true,
+        detection = 'restricted_event_spoof_high',
+        reason = 'Intento de desactivar detecciones bloqueado',
+        allowPanelAccess = true,
+        allowGuardPanelAccess = true,
+    },
+    ['antilynx8:anticheat'] = {
+        block = true,
+        punish = true,
+        detection = 'restricted_event_spoof_high',
+        reason = 'Firma de cheat menu (antilynx) detectada',
+        allowPanelAccess = true,
+        allowGuardPanelAccess = true,
+    },
+    ['antilynx8r4a:anticheat'] = {
+        block = true,
+        punish = true,
+        detection = 'restricted_event_spoof_high',
+        reason = 'Firma de cheat menu (antilynx) detectada',
+        allowPanelAccess = true,
+        allowGuardPanelAccess = true,
+    },
+    ['antilynxr6:detection'] = {
+        block = true,
+        punish = true,
+        detection = 'restricted_event_spoof_high',
+        reason = 'Firma de cheat menu (antilynx) detectada',
+        allowPanelAccess = true,
+        allowGuardPanelAccess = true,
+    },
+    ['antilynxr4:detect'] = {
+        block = true,
+        punish = true,
+        detection = 'restricted_event_spoof_high',
+        reason = 'Firma de cheat menu (antilynx) detectada',
+        allowPanelAccess = true,
+        allowGuardPanelAccess = true,
+    },
+    ['antilynxr4:kick'] = {
+        block = true,
+        punish = true,
+        detection = 'restricted_event_spoof_high',
+        reason = 'Firma de cheat menu (antilynx) detectada',
+        allowPanelAccess = true,
+        allowGuardPanelAccess = true,
+    },
+    ['antilynxr4:log'] = {
+        block = true,
+        punish = true,
+        detection = 'restricted_event_spoof_high',
+        reason = 'Firma de cheat menu (antilynx) detectada',
+        allowPanelAccess = true,
+        allowGuardPanelAccess = true,
+    },
+    ['ynx8:anticheat'] = {
+        block = true,
+        punish = true,
+        detection = 'restricted_event_spoof_high',
+        reason = 'Firma de cheat menu (ynx/lynx) detectada',
+        allowPanelAccess = true,
+        allowGuardPanelAccess = true,
+    },
+    ['lynx8:anticheat'] = {
+        block = true,
+        punish = true,
+        detection = 'restricted_event_spoof_high',
+        reason = 'Firma de cheat menu (ynx/lynx) detectada',
+        allowPanelAccess = true,
+        allowGuardPanelAccess = true,
+    },
+    ['js:jailuser'] = {
+        block = true,
+        punish = true,
+        detection = 'restricted_event_spoof_high',
+        reason = 'Evento de menu malicioso (js:jailuser) detectado',
+        allowPanelAccess = true,
+        allowGuardPanelAccess = true,
+    },
+    ['js:jadfwmiluser'] = {
+        block = true,
+        punish = true,
+        detection = 'restricted_event_spoof_high',
+        reason = 'Evento ofuscado (dfwm) detectado',
+        allowPanelAccess = true,
+        allowGuardPanelAccess = true,
+    },
+    ['xk3ly-barbasz:getfukingmony'] = {
+        block = true,
+        punish = true,
+        detection = 'restricted_event_spoof_high',
+        reason = 'Evento de money exploit conocido detectado',
+        allowPanelAccess = true,
+        allowGuardPanelAccess = true,
+    },
+    ['xk3ly-farmer:paycheck'] = {
+        block = true,
+        punish = true,
+        detection = 'restricted_event_spoof_high',
+        reason = 'Evento de money exploit conocido detectado',
+        allowPanelAccess = true,
+        allowGuardPanelAccess = true,
+    },
+
+    -- Privileged economy/job mutation events.
+    ['esx:setjob'] = {
+        block = true,
+        punish = false,
+        detection = 'restricted_event_spoof',
+        reason = 'Mutacion de job no autorizada',
+        allowPanelAccess = true,
+        allowGuardPanelAccess = true,
+        allowPermissionLevels = { 'full' },
+    },
+    ['esx_society:setjob'] = {
+        block = true,
+        punish = false,
+        detection = 'restricted_event_spoof',
+        reason = 'Mutacion de job no autorizada',
+        allowPanelAccess = true,
+        allowGuardPanelAccess = true,
+        allowPermissionLevels = { 'full' },
+    },
+    ['esx_society:setjobsalary'] = {
+        block = true,
+        punish = false,
+        detection = 'restricted_event_spoof',
+        reason = 'Cambio de salario no autorizado',
+        allowPanelAccess = true,
+        allowGuardPanelAccess = true,
+        allowPermissionLevels = { 'full' },
+    },
+    ['nb:recruterplayer'] = {
+        block = true,
+        punish = true,
+        detection = 'restricted_event_spoof_high',
+        reason = 'Evento de reclutamiento no autorizado',
+        allowPanelAccess = true,
+        allowGuardPanelAccess = true,
+        allowPermissionLevels = { 'full' },
+    },
+    ['nb:destituerplayer'] = {
+        block = true,
+        punish = true,
+        detection = 'restricted_event_spoof_high',
+        reason = 'Evento de destitucion no autorizado',
+        allowPanelAccess = true,
+        allowGuardPanelAccess = true,
+        allowPermissionLevels = { 'full' },
+    },
+
+    -- Revive abuse (allow only medics/admin-level).
+    ['esx_ambulancejob:revive'] = {
+        block = true,
+        punish = false,
+        detection = 'restricted_event_spoof',
+        reason = 'Revive no autorizado',
+        allowPanelAccess = true,
+        allowGuardPanelAccess = true,
+        allowJobs = { 'ambulance', 'ems', 'paramedic' },
+        allowGroups = { 'superadmin', 'admin', 'mod', 'helper', 'master', 'owner' },
+        allowPermissionLevels = { 'full', 'vip' },
+    },
+    ['paramedic:revive'] = {
+        block = true,
+        punish = false,
+        detection = 'restricted_event_spoof',
+        reason = 'Revive no autorizado',
+        allowPanelAccess = true,
+        allowGuardPanelAccess = true,
+        allowJobs = { 'ambulance', 'ems', 'paramedic' },
+        allowGroups = { 'superadmin', 'admin', 'mod', 'helper', 'master', 'owner' },
+        allowPermissionLevels = { 'full', 'vip' },
+    },
+    ['ems:revive'] = {
+        block = true,
+        punish = false,
+        detection = 'restricted_event_spoof',
+        reason = 'Revive no autorizado',
+        allowPanelAccess = true,
+        allowGuardPanelAccess = true,
+        allowJobs = { 'ambulance', 'ems', 'paramedic' },
+        allowGroups = { 'superadmin', 'admin', 'mod', 'helper', 'master', 'owner' },
+        allowPermissionLevels = { 'full', 'vip' },
+    },
+}
+
+local RestrictedEventRules = {}
+
+local function _NormalizeRestrictedEventName(eventName)
+    if type(eventName) ~= 'string' then
+        return nil
+    end
+
+    local normalized = eventName:gsub('^%s+', ''):gsub('%s+$', ''):lower()
+    if normalized == '' then
+        return nil
+    end
+
+    return normalized
+end
+
+local function _CloneTableDeep(value)
+    if type(value) ~= 'table' then
+        return value
+    end
+
+    local out = {}
+    for k, v in pairs(value) do
+        out[k] = _CloneTableDeep(v)
+    end
+    return out
+end
+
+local function _NormalizeStringLookup(value)
+    local lookup = {}
+    if type(value) ~= 'table' then
+        return lookup
+    end
+
+    for k, v in pairs(value) do
+        local raw = nil
+        if type(k) == 'number' and type(v) == 'string' then
+            raw = v
+        elseif type(k) == 'string' and v == true then
+            raw = k
+        end
+
+        if raw then
+            local key = tostring(raw):lower()
+            if key ~= '' then
+                lookup[key] = true
+            end
+        end
+    end
+
+    return lookup
+end
+
+local function _BuildRestrictedRule(baseRule, overrideRule)
+    local base = type(baseRule) == 'table' and _CloneTableDeep(baseRule) or {}
+    local src = type(overrideRule) == 'table' and overrideRule or {}
+
+    if src.enabled ~= nil then
+        base.enabled = src.enabled == true
+    elseif base.enabled == nil then
+        base.enabled = true
+    end
+
+    if src.block ~= nil then
+        base.block = src.block ~= false
+    elseif base.block == nil then
+        base.block = true
+    end
+
+    if src.allowPanelAccess ~= nil then
+        base.allowPanelAccess = src.allowPanelAccess ~= false
+    elseif base.allowPanelAccess == nil then
+        base.allowPanelAccess = true
+    end
+
+    if src.allowGuardPanelAccess ~= nil then
+        base.allowGuardPanelAccess = src.allowGuardPanelAccess == true
+    elseif base.allowGuardPanelAccess == nil then
+        base.allowGuardPanelAccess = true
+    end
+
+    if src.detection ~= nil then
+        base.detection = tostring(src.detection)
+    elseif type(base.detection) ~= 'string' then
+        base.detection = 'restricted_event_spoof'
+    end
+
+    if src.reason ~= nil then
+        base.reason = tostring(src.reason)
+    elseif type(base.reason) ~= 'string' then
+        base.reason = 'Evento restringido no autorizado'
+    end
+
+    local punishEnabled = nil
+    local punishPermanent = nil
+    local punishDuration = nil
+    local punishCooldown = nil
+    local punishBy = nil
+
+    if type(src.punish) == 'boolean' then
+        punishEnabled = src.punish
+    elseif type(src.punish) == 'table' then
+        punishEnabled = src.punish.enabled
+        punishPermanent = src.punish.permanent
+        punishDuration = src.punish.durationSeconds
+        punishCooldown = src.punish.cooldownMs
+        punishBy = src.punish.by
+    end
+
+    if src.punishEnabled ~= nil then
+        punishEnabled = src.punishEnabled
+    end
+    if src.punishPermanent ~= nil then
+        punishPermanent = src.punishPermanent
+    end
+    if src.punishDurationSeconds ~= nil then
+        punishDuration = src.punishDurationSeconds
+    end
+    if src.punishCooldownMs ~= nil then
+        punishCooldown = src.punishCooldownMs
+    end
+    if src.punishBy ~= nil then
+        punishBy = src.punishBy
+    end
+
+    if punishEnabled ~= nil then
+        base.punishEnabled = punishEnabled == true
+    elseif base.punishEnabled == nil then
+        base.punishEnabled = false
+    end
+
+    if punishPermanent ~= nil then
+        base.punishPermanent = punishPermanent ~= false
+    elseif base.punishPermanent == nil then
+        base.punishPermanent = true
+    end
+
+    if punishDuration ~= nil then
+        base.punishDurationSeconds = tonumber(punishDuration) or 0
+    elseif type(base.punishDurationSeconds) ~= 'number' then
+        base.punishDurationSeconds = 0
+    end
+
+    if punishCooldown ~= nil then
+        base.punishCooldownMs = math.max(tonumber(punishCooldown) or 0, 0)
+    elseif type(base.punishCooldownMs) ~= 'number' then
+        base.punishCooldownMs = 15000
+    end
+
+    if punishBy ~= nil then
+        base.punishBy = tostring(punishBy)
+    elseif type(base.punishBy) ~= 'string' or base.punishBy == '' then
+        base.punishBy = 'LyxGuard TriggerProtection'
+    end
+
+    if src.allowAce ~= nil then
+        base.allowAce = _NormalizeStringLookup(src.allowAce)
+    elseif type(base.allowAce) ~= 'table' then
+        base.allowAce = _NormalizeStringLookup(base.allowAce)
+    end
+
+    if src.allowJobs ~= nil then
+        base.allowJobs = _NormalizeStringLookup(src.allowJobs)
+    elseif type(base.allowJobs) ~= 'table' then
+        base.allowJobs = _NormalizeStringLookup(base.allowJobs)
+    end
+
+    if src.allowGroups ~= nil then
+        base.allowGroups = _NormalizeStringLookup(src.allowGroups)
+    elseif type(base.allowGroups) ~= 'table' then
+        base.allowGroups = _NormalizeStringLookup(base.allowGroups)
+    end
+
+    if src.allowPermissionLevels ~= nil then
+        base.allowPermissionLevels = _NormalizeStringLookup(src.allowPermissionLevels)
+    elseif type(base.allowPermissionLevels) ~= 'table' then
+        base.allowPermissionLevels = _NormalizeStringLookup(base.allowPermissionLevels)
+    end
+
+    return base
+end
+
+local function _RefreshRestrictedEventRules()
+    local merged = {}
+
+    for eventName, rule in pairs(RestrictedEventDefaults) do
+        local normalized = _NormalizeRestrictedEventName(eventName)
+        if normalized then
+            merged[normalized] = _BuildRestrictedRule(nil, rule)
+        end
+    end
+
+    local custom = Config and Config.TriggerProtection and Config.TriggerProtection.restrictedEvents or nil
+    if type(custom) == 'table' then
+        for k, v in pairs(custom) do
+            local eventName = nil
+            if type(k) == 'number' and type(v) == 'string' then
+                eventName = v
+                v = true
+            elseif type(k) == 'string' then
+                eventName = k
+            end
+
+            local normalized = _NormalizeRestrictedEventName(eventName)
+            if normalized then
+                if v == false then
+                    merged[normalized] = nil
+                elseif v == true then
+                    local fallback = merged[normalized]
+                    merged[normalized] = _BuildRestrictedRule(fallback, {})
+                elseif type(v) == 'table' then
+                    local fallback = merged[normalized]
+                    merged[normalized] = _BuildRestrictedRule(fallback, v)
+                end
+            end
+        end
+    end
+
+    RestrictedEventRules = merged
+end
+
+_RefreshRestrictedEventRules()
+
+-- ---------------------------------------------------------------------------
 -- HONEYPOT COMMANDS (chat commands commonly used by cheat menus/executors)
 -- ---------------------------------------------------------------------------
 
@@ -953,6 +1441,54 @@ local function _GetSpamScale()
     local cfg = _GetTriggerCfg()
     local scale = tonumber(cfg.spamScale) or 1.0
     if scale < 1.0 then scale = 1.0 end
+
+    local adaptive = cfg.adaptiveBaseline
+    if type(adaptive) == 'table' and adaptive.enabled == true then
+        local players = #GetPlayers()
+        local basePlayers = tonumber(adaptive.basePlayers) or 32
+        if basePlayers < 1 then basePlayers = 1 end
+
+        local playerStep = tonumber(adaptive.playerStep) or 16
+        if playerStep < 1 then playerStep = 1 end
+
+        local maxPlayerBonus = tonumber(adaptive.maxPlayerBonus) or 2.0
+        if maxPlayerBonus < 0 then maxPlayerBonus = 0 end
+
+        local playerBonus = 0
+        if players > basePlayers then
+            playerBonus = (players - basePlayers) / playerStep
+            if playerBonus > maxPlayerBonus then
+                playerBonus = maxPlayerBonus
+            end
+        end
+
+        local useUtc = adaptive.useUtc == true
+        local hour = tonumber(os.date(useUtc and '!%H' or '%H')) or 0
+        if hour < 0 then hour = 0 end
+        if hour > 23 then hour = 23 end
+
+        local peakStart = tonumber(adaptive.peakStartHour) or 18
+        local peakEnd = tonumber(adaptive.peakEndHour) or 23
+        local peakMultiplier = tonumber(adaptive.peakMultiplier) or 1.15
+        local offPeakMultiplier = tonumber(adaptive.offPeakMultiplier) or 1.0
+
+        local inPeak = false
+        if peakStart <= peakEnd then
+            inPeak = (hour >= peakStart and hour <= peakEnd)
+        else
+            inPeak = (hour >= peakStart or hour <= peakEnd)
+        end
+
+        scale = scale * (1.0 + playerBonus)
+        scale = scale * (inPeak and peakMultiplier or offPeakMultiplier)
+
+        local maxScale = tonumber(adaptive.maxScale) or 12.0
+        if maxScale >= 1.0 and scale > maxScale then
+            scale = maxScale
+        end
+    end
+
+    if scale < 1.0 then scale = 1.0 end
     return scale
 end
 
@@ -1135,6 +1671,10 @@ local function _GetPanelAdminProtectCfg()
         ['lyxpanel:reports:claim'] = true,
         ['lyxpanel:reports:resolve'] = true,
         ['lyxpanel:reports:get'] = true,
+        ['lyxpanel:danger:approve'] = true,
+        ['lyxpanel:staffcmd:requestRevive'] = true,
+        ['lyxpanel:staffcmd:requestInstantRespawn'] = true,
+        ['lyxpanel:staffcmd:requestAmmoRefill'] = true,
     }
 
     for ev, enabled in pairs(defaults) do
@@ -1294,6 +1834,201 @@ local function _HasGuardPanelAccessViaExport(source)
     return ok == true and has == true
 end
 
+local _RestrictedEventPunishCooldown = {}
+
+local function _LookupNormalized(map, value)
+    if type(map) ~= 'table' then
+        return false
+    end
+    if type(value) ~= 'string' or value == '' then
+        return false
+    end
+    return map[value:lower()] == true
+end
+
+local function _GetRestrictedPlayerContext(source)
+    local ctx = {
+        group = nil,
+        job = nil,
+        permissionLevel = nil
+    }
+
+    if type(GetPlayerPermissionLevel) == 'function' then
+        local ok, level = pcall(GetPlayerPermissionLevel, source)
+        if ok and type(level) == 'string' and level ~= '' then
+            ctx.permissionLevel = level:lower()
+        end
+    end
+
+    local esxObj = _G.ESX
+    if type(esxObj) == 'table' and type(esxObj.GetPlayerFromId) == 'function' then
+        local ok, xPlayer = pcall(esxObj.GetPlayerFromId, source)
+        if ok and xPlayer then
+            if type(xPlayer.getGroup) == 'function' then
+                local gok, g = pcall(xPlayer.getGroup, xPlayer)
+                if gok and type(g) == 'string' and g ~= '' then
+                    ctx.group = g:lower()
+                end
+            elseif type(xPlayer.group) == 'string' and xPlayer.group ~= '' then
+                ctx.group = xPlayer.group:lower()
+            end
+
+            local jobData = nil
+            if type(xPlayer.getJob) == 'function' then
+                local jok, j = pcall(xPlayer.getJob, xPlayer)
+                if jok then
+                    jobData = j
+                end
+            end
+            if not jobData and type(xPlayer.job) == 'table' then
+                jobData = xPlayer.job
+            end
+
+            if type(jobData) == 'table' then
+                local jobName = jobData.name or jobData.label
+                if type(jobName) == 'string' and jobName ~= '' then
+                    ctx.job = jobName:lower()
+                end
+            end
+        end
+    end
+
+    if (not ctx.group or not ctx.job) and type(Player) == 'function' then
+        local p = Player(source)
+        local state = p and p.state or nil
+        if state then
+            if not ctx.group then
+                local sg = state.group
+                if type(sg) == 'string' and sg ~= '' then
+                    ctx.group = sg:lower()
+                end
+            end
+
+            if not ctx.job then
+                local sj = state.job
+                if type(sj) == 'table' then
+                    sj = sj.name or sj.label
+                end
+                if type(sj) == 'string' and sj ~= '' then
+                    ctx.job = sj:lower()
+                end
+            end
+        end
+    end
+
+    return ctx
+end
+
+local function _CanPunishRestrictedEvent(source, rule)
+    local cooldownMs = tonumber(rule and rule.punishCooldownMs) or 0
+    if cooldownMs <= 0 then
+        return true
+    end
+
+    local now = GetGameTimer()
+    local last = _RestrictedEventPunishCooldown[source] or 0
+    if (now - last) < cooldownMs then
+        return false
+    end
+
+    _RestrictedEventPunishCooldown[source] = now
+    return true
+end
+
+local function _IsRestrictedEventAllowed(source, rule, ctx)
+    if IsPlayerImmune and IsPlayerImmune(source) then
+        return true
+    end
+
+    if rule.allowPanelAccess ~= false and _HasPanelAccessViaExport(source) then
+        return true
+    end
+
+    if rule.allowGuardPanelAccess == true and _HasGuardPanelAccessViaExport(source) then
+        return true
+    end
+
+    if _HasAnyAce(source, rule.allowAce) then
+        return true
+    end
+
+    if _LookupNormalized(rule.allowPermissionLevels, ctx.permissionLevel) then
+        return true
+    end
+
+    if _LookupNormalized(rule.allowGroups, ctx.group) then
+        return true
+    end
+
+    if _LookupNormalized(rule.allowJobs, ctx.job) then
+        return true
+    end
+
+    return false
+end
+
+local function _HandleRestrictedEvent(source, eventName, eventData)
+    local normalized = _NormalizeRestrictedEventName(eventName)
+    if not normalized then
+        return false
+    end
+
+    local rule = RestrictedEventRules[normalized]
+    if type(rule) ~= 'table' or rule.enabled ~= true then
+        return false
+    end
+
+    local ctx = _GetRestrictedPlayerContext(source)
+    if _IsRestrictedEventAllowed(source, rule, ctx) then
+        return false
+    end
+
+    local detection = tostring(rule.detection or 'restricted_event_spoof')
+    local argCount = (type(eventData) == 'table') and #eventData or nil
+
+    if rule.block ~= false then
+        CancelEvent()
+    end
+
+    if MarkPlayerSuspicious then
+        MarkPlayerSuspicious(source, detection, {
+            event = eventName,
+            group = ctx.group,
+            job = ctx.job,
+            permissionLevel = ctx.permissionLevel,
+            args = argCount
+        })
+    end
+
+    if ApplyPunishment then
+        ApplyPunishment(source, detection, { punishment = 'none', tolerance = 1 }, {
+            reason = tostring(rule.reason or 'Evento restringido no autorizado'),
+            event = eventName,
+            group = ctx.group,
+            job = ctx.job,
+            permissionLevel = ctx.permissionLevel,
+            args = argCount
+        })
+    end
+
+    if rule.punishEnabled and _CanPunishRestrictedEvent(source, rule) then
+        local reason = ('%s | event=%s'):format(
+            tostring(rule.reason or 'Evento restringido no autorizado'),
+            tostring(eventName)
+        )
+        local duration = (rule.punishPermanent == true) and 0 or math.max(tonumber(rule.punishDurationSeconds) or 0, 60)
+        local by = tostring(rule.punishBy or 'LyxGuard TriggerProtection')
+
+        if BanPlayer then
+            BanPlayer(source, reason, duration, by)
+        else
+            DropPlayer(source, reason)
+        end
+    end
+
+    return rule.block ~= false
+end
+
 local function _HandlePanelAdminEventSpoof(source, eventName)
     local cfg = _GetPanelAdminProtectCfg()
     if cfg.enabled ~= true then return false end
@@ -1432,6 +2167,10 @@ function RegisterProtectedNetEvent(eventName, handler)
             return handler(...)
         end
 
+        if _HandleRestrictedEvent(source, eventName, { ... }) then
+            return
+        end
+
         -- Check blacklisted events
         if BlacklistedEventLookup[eventName] then
             -- Log and reject
@@ -1499,6 +2238,11 @@ AddEventHandler('__cfx_internal:serverEventTriggered', function(eventName, event
 
     -- LyxGuard panel-event spoof protection.
     if _HandleGuardPanelEventSpoof(s, eventName) then
+        return
+    end
+
+    -- Restricted/sensitive events (job/economy/admin abuse vectors).
+    if _HandleRestrictedEvent(s, eventName, eventData) then
         return
     end
 
@@ -1869,6 +2613,7 @@ AddEventHandler('playerDropped', function()
     local source = source
     PlayerEventHistory[source] = nil
     _PanelSpoofPunishCooldown[source] = nil
+    _RestrictedEventPunishCooldown[source] = nil
 end)
 -- -----------------------------------------------------------------------------
 -- EXPORTS
@@ -1882,6 +2627,31 @@ end)
 -- Add event to blacklist at runtime
 exports('AddBlacklistedEvent', function(eventName)
     BlacklistedEventLookup[eventName] = true
+end)
+
+exports('IsRestrictedEvent', function(eventName)
+    local normalized = _NormalizeRestrictedEventName(eventName)
+    return normalized and RestrictedEventRules[normalized] ~= nil or false
+end)
+
+exports('AddRestrictedEvent', function(eventName, rule)
+    local normalized = _NormalizeRestrictedEventName(eventName)
+    if not normalized then
+        return false
+    end
+
+    local current = RestrictedEventRules[normalized]
+    RestrictedEventRules[normalized] = _BuildRestrictedRule(current, type(rule) == 'table' and rule or {})
+    return true
+end)
+
+exports('RemoveRestrictedEvent', function(eventName)
+    local normalized = _NormalizeRestrictedEventName(eventName)
+    if not normalized then
+        return false
+    end
+    RestrictedEventRules[normalized] = nil
+    return true
 end)
 
 -- Add spam check for event at runtime
