@@ -2,56 +2,67 @@
 
 ![LyxGuard Banner](docs/banner.svg)
 
-Anticheat modular **server-first** para FiveM/ESX, con firewall de eventos, anti-spoof y trazabilidad exhaustiva.
+Anticheat modular **server-first** para FiveM/ESX. Enfoque: bloquear abuso real (spoof de eventos admin, floods, payloads anomales) con trazabilidad exhaustiva y perfiles de carga.
 
-## Estado del proyecto
-- Licencia: `MIT`
-- Estado: `Activo`
-- Objetivo: reducir abuso real de eventos/admin spoof/economia/entidades
-- Integracion recomendada: `lyx-panel`
+Este recurso esta pensado para funcionar **junto a** `lyx-panel`.
+Puede correr solo, pero para seguridad y cobertura completas se recomienda tener ambos activos (y varias funciones se degradan o se deshabilitan si falta el otro).
 
-## Que incluye
-- Firewall server-side para eventos criticos:
-  - allowlist
-  - schema validation
-  - rate-limit
-  - anti-replay
-- Hardening anti-spoof en rutas sensibles.
-- Score de riesgo acumulativo + cuarentena progresiva.
-- Detecciones por modulos (cliente y servidor), con prioridad server.
-- Honeypots de alta confianza.
-- Logging exhaustivo:
-  - JSONL + texto
-  - timeline previo a warn/ban
-  - correlacion por actor/evento/resultado
-- Perfiles de runtime:
-  - `rp_light`
-  - `production_high_load`
-  - `hostile`
+## Tabla de contenido
+1. Instalacion
+2. Configuracion (defaults)
+3. Seguridad (modelo y garantias)
+4. Sistema de sanciones (warn/quarantine/ban)
+5. Logging exhaustivo (archivos locales)
+6. Perfiles de runtime
+7. Integracion con LyxPanel
+8. Troubleshooting
+9. QA offline
+10. Mapa del proyecto
+11. Docs
 
 ## Requisitos
 - FiveM (artefacto actualizado).
 - `es_extended`
 - `oxmysql`
+- Recomendado: `lyx-panel`
 
-## Instalacion rapida
-1. Copiar `lyx-guard` a `resources/[local]/lyx-guard`.
-2. En `server.cfg`:
+## Instalacion (paso a paso)
+1. Copiar carpeta `lyx-guard` a:
+   - `resources/[local]/lyx-guard`
+2. Asegurar orden en `server.cfg`:
 ```cfg
 ensure oxmysql
 ensure es_extended
 ensure lyx-guard
+ensure lyx-panel
 ```
-3. Reiniciar servidor.
-4. Revisar logs de inicio y estado de modulos.
+3. Reiniciar el servidor.
+4. Verificar consola:
+   - migraciones (LyxGuard aplica migraciones versionadas)
+   - estado del firewall
+   - carga de modulos
 
-## Configuracion
-- Archivo principal: `config.lua`
-- Perfil recomendado en produccion:
+## Configuracion (defaults importantes)
+Archivo: `config.lua`
+
+### Perfil de runtime (tuning)
 ```lua
+-- Valores: default | rp_light | production_high_load | hostile
 Config.RuntimeProfile = 'production_high_load'
 ```
-- Logging exhaustivo:
+
+### Firewall de eventos / trigger protection
+LyxGuard protege server-side:
+- allowlist de namespaces/eventos
+- schema validation (tipos/rangos/longitudes)
+- rate-limit por jugador/evento
+- anti-replay para acciones sensibles
+
+Los limites exactos dependen del perfil.
+Guia recomendada:
+- `docs/operations/PRODUCCION_ALTA_CARGA.md`
+
+### Logging exhaustivo (archivos locales)
 ```lua
 Config.ExhaustiveLogs = {
   enabled = true,
@@ -60,42 +71,125 @@ Config.ExhaustiveLogs = {
 }
 ```
 
-## Arquitectura
-```mermaid
-flowchart LR
-  C[Cliente: telemetria + checks] --> S[Servidor: detecciones + firewall]
-  S --> Q[Quarantine / Escalado]
-  S --> P[Punishments / Ban]
-  S --> L[Logs exhaustivos]
-  S --> D[(oxmysql)]
-```
+Salida:
+- carpeta: `logs/`
+- incluye timeline previo a warn/ban y correlation_id
 
-## Modelo de seguridad
-- Toda decision critica vive en servidor.
-- El cliente aporta senales y verificacion auxiliar.
-- Eventos anomales de alto riesgo se bloquean antes del handler final.
-- Se evitan rutas dinamicas peligrosas (`load`, `loadstring`, exec remoto).
+## Seguridad (modelo y garantias)
+Principios:
+- **Server-authoritative**: el servidor decide; el cliente aporta senales auxiliares.
+- Bloqueo antes del handler final para eventos anomales de alto riesgo.
+- Sin rutas peligrosas de ejecucion dinamica (`load`, `loadstring`, exec remoto).
+
+Anti-spoof:
+- deteccion de ejecucion de eventos admin (LyxPanel/txAdmin) por jugadores sin permisos
+- validacion de payloads
+- escalado por reincidencia (segun perfil)
+
+## Sistema de sanciones (warn -> quarantine -> ban)
+LyxGuard implementa:
+- score/riesgo acumulativo
+- cooldowns por razon
+- cuarentena progresiva para casos grises
+- evidencia (logs + timeline) para revisiones
+
+La politica exacta (duraciones, escalado) se ajusta en `config.lua`.
+
+## Perfiles de runtime
+Valores:
+- `rp_light`: tolerante, menos agresivo
+- `production_high_load`: para servidores con picos altos de eventos
+- `hostile`: mas cerrado, pensado para entornos con spoof/flood
+
+Guia con valores exactos:
+- `docs/operations/PRODUCCION_ALTA_CARGA.md`
 
 ## Integracion con LyxPanel
-- Comparticion de contexto de seguridad para auditoria.
-- Dependencia cruzada opcional: al faltar uno, se degradan funciones dependientes.
+Cuando ambos estan activos:
+- mejor auditoria (panel + guard con correlation_id)
+- mejor respuesta a spoof de acciones admin
+- degradacion controlada: si falta uno, se deshabilitan features dependientes y se notifica
 
-## Si queres aportar
-Contribuciones tecnicas bienvenidas:
-1. Prioriza cambios pequenos y medibles.
-2. Si agregas deteccion, inclui:
-   - calibracion de umbral
-   - metadatos de log
-   - plan anti-falsos positivos
-3. Mantene compatibilidad con perfiles runtime.
+## Troubleshooting (comun)
+1. Bans/flags inesperados:
+   - bajar agresividad: usar `rp_light` o subir limites en `production_high_load`
+   - revisar logs exhaustivos (timeline previo)
+2. Alto ruido por eventos legitimos:
+   - subir `massiveTriggersPerMinute` y los limites del firewall (ver docs de operaciones)
+3. No aparecen logs:
+   - confirmar `Config.ExhaustiveLogs.enabled = true`
+   - verificar permisos de escritura del recurso (carpeta `logs/`)
 
-Ver:
-- `CONTRIBUTING.md`
-- `SECURITY.md`
-
-## QA offline (recomendado antes de release)
+## QA offline (antes de release)
 ```bash
 node tools/qa/check_events.js
+```
+
+## Mapa del proyecto (estructura)
+```text
+lyx-guard/
+  fxmanifest.lua
+  config.lua
+  README.md
+  LICENSE
+  SECURITY.md
+  CONTRIBUTING.md
+  .gitignore
+
+  server/
+    main.lua
+    bootstrap.lua
+    trigger_protection.lua
+    detections.lua
+    punishments.lua
+    quarantine.lua
+    ban_system.lua
+    exhaustive_logs.lua
+    connection_security.lua
+    panel.lua
+    admin_config.lua
+    migrations.lua
+    utils.lua
+    webhooks.lua
+
+  client/
+    main.lua
+    core.lua
+    panel.lua
+    protection_loader.lua
+    protection_registrar.lua
+    detections/*.lua
+    protections/*.lua
+
+  shared/
+    lib.lua
+    functions.lua
+    structured_logger.lua
+    blacklists/*.lua
+
+  database/
+    database.sql
+    database_reset.sql
+
+  logs/
+    .gitkeep
+
+  html/
+    index.html
+    css/style.css
+    js/app.js
+    vendor/fontawesome/...
+
+  tools/
+    qa/check_events.js
+
+  docs/
+    banner.svg
+    operations/PRODUCCION_ALTA_CARGA.md
+    pack_parity/PACK_PARITY_PASS1.md
+    pack_parity/PACK_PARITY_PASS2.md
+    pack_parity/PACK_PARITY_PASS3.md
+    pack_parity/PACK_PARITY_PASS4.md
 ```
 
 ## Docs
@@ -105,15 +199,15 @@ node tools/qa/check_events.js
 - Plan de cierre: `docs/pack_parity/PACK_PARITY_PASS4.md`
 - Perfil produccion alta carga: `docs/operations/PRODUCCION_ALTA_CARGA.md`
 
-## Roadmap
-- Usar Issues/PRs del repo para el backlog y el progreso.
+## Contribuir
+Contribuciones tecnicas bienvenidas:
+- cambios pequenos y revisables
+- si agregas deteccion: umbral + metadata de log + plan anti falsos positivos
 
-## Checklist de release recomendado
-- Perfiles revisados (`rp_light`, `production_high_load`, `hostile`)
-- Eventos criticos con schema/rate-limit/permiso
-- Logging exhaustivo funcionando
-- Retencion/rotacion de logs validada
-- Plan de rollback definido
+Ver:
+- `CONTRIBUTING.md`
+- `SECURITY.md`
 
 ## Licencia
 MIT. Ver `LICENSE`.
+
