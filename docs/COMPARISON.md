@@ -1,7 +1,7 @@
 # LyxGuard - Comparaciones y Alcance
 
 Este documento compara el enfoque de LyxGuard con:
-- anticheats open source (ejemplos locales en `anticheat-copiar`)
+- anticheats open source 
 - anticheats de pago conocidos (referencia: FiveGuard y similares)
 
 ## 1) Alcance real de LyxGuard
