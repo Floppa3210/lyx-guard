@@ -185,19 +185,15 @@ lyx-guard/
 
   docs/
     banner.svg
-    operations/PRODUCCION_ALTA_CARGA.md
-    pack_parity/PACK_PARITY_PASS1.md
-    pack_parity/PACK_PARITY_PASS2.md
-    pack_parity/PACK_PARITY_PASS3.md
-    pack_parity/PACK_PARITY_PASS4.md
+    INSTALL_SERVER.md
+    DEEP_DIVE.md
+    COMPARISON.md
 ```
 
 ## Docs
-- Pack parity (comparativa, no SaaS): `docs/pack_parity/PACK_PARITY_PASS1.md`
-- Evidencia tecnica: `docs/pack_parity/PACK_PARITY_PASS2.md`
-- Brechas/riesgos: `docs/pack_parity/PACK_PARITY_PASS3.md`
-- Plan de cierre: `docs/pack_parity/PACK_PARITY_PASS4.md`
-- Perfil produccion alta carga: `docs/operations/PRODUCCION_ALTA_CARGA.md`
+- Instalacion y configuracion (servidor): `docs/INSTALL_SERVER.md`
+- Como funciona (profundidad): `docs/DEEP_DIVE.md`
+- Comparaciones (otros anticheats y enfoque): `docs/COMPARISON.md`
 
 ## Contribuir
 Contribuciones tecnicas bienvenidas:
