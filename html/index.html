@@ -1,0 +1,801 @@
+﻿<!DOCTYPE html>
+<html lang="es">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LyxGuard - Anticheat Monitor</title>
+    <link rel="stylesheet" href="css/style.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+
+<body>
+    <div id="app" class="hidden">
+        <!-- Sidebar -->
+        <aside class="sidebar">
+            <div class="sidebar-header">
+                <div class="logo"><i class="fas fa-shield-virus"></i><span>LyxGuard</span></div>
+                <span class="version">v4.0</span>
+            </div>
+            <nav class="sidebar-nav">
+                <button class="nav-item active" data-page="dashboard"><i
+                        class="fas fa-home"></i><span>Dashboard</span></button>
+                <button class="nav-item" data-page="detections"><i
+                        class="fas fa-exclamation-triangle"></i><span>Detecciones</span></button>
+                <button class="nav-item" data-page="bans"><i class="fas fa-ban"></i><span>Bans</span></button>
+                <button class="nav-item" data-page="warnings"><i
+                        class="fas fa-exclamation-circle"></i><span>Warnings</span></button>
+                <button class="nav-item" data-page="suspicious"><i
+                        class="fas fa-user-secret"></i><span>Sospechosos</span></button>
+                <button class="nav-item" data-page="realtime"><i class="fas fa-satellite-dish"></i><span>Tiempo
+                        Real</span></button>
+                <button class="nav-item" data-page="adminconfig"><i
+                        class="fas fa-user-shield"></i><span>Admin Config</span></button>
+                <button class="nav-item" data-page="settings"><i
+                        class="fas fa-cog"></i><span>Configuración</span></button>
+            </nav>
+            <div class="sidebar-footer">
+                <div class="status-indicator online">
+                    <span class="pulse"></span>
+                    <span>Activo</span>
+                </div>
+                <button class="btn-close" onclick="closePanel()"><i class="fas fa-times"></i></button>
+            </div>
+        </aside>
+
+        <!-- Main Content -->
+        <main class="main-content">
+            <!-- Dashboard -->
+            <section id="page-dashboard" class="page active">
+                <div class="page-header">
+                    <h1><i class="fas fa-home"></i> Dashboard</h1>
+                    <button class="btn btn-primary" onclick="refreshData()"><i class="fas fa-sync-alt"></i>
+                        Actualizar</button>
+                </div>
+
+                <!-- Stats Grid -->
+                <div class="stats-grid">
+                    <div class="stat-card">
+                        <div class="stat-icon gradient-blue"><i class="fas fa-users"></i></div>
+                        <div class="stat-info">
+                            <span class="stat-value" id="statPlayers">0/32</span>
+                            <span class="stat-label">Jugadores Online</span>
+                        </div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-icon gradient-red"><i class="fas fa-exclamation-triangle"></i></div>
+                        <div class="stat-info">
+                            <span class="stat-value" id="statDetectionsToday">0</span>
+                            <span class="stat-label">Detecciones Hoy</span>
+                        </div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-icon gradient-orange"><i class="fas fa-ban"></i></div>
+                        <div class="stat-info">
+                            <span class="stat-value" id="statBansActive">0</span>
+                            <span class="stat-label">Bans Activos</span>
+                        </div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-icon gradient-yellow"><i class="fas fa-exclamation-circle"></i></div>
+                        <div class="stat-info">
+                            <span class="stat-value" id="statWarnings">0</span>
+                            <span class="stat-label">Warnings Activos</span>
+                        </div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-icon gradient-purple"><i class="fas fa-user-secret"></i></div>
+                        <div class="stat-info">
+                            <span class="stat-value" id="statSuspicious">0</span>
+                            <span class="stat-label">Sospechosos</span>
+                        </div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-icon gradient-green"><i class="fas fa-shield-alt"></i></div>
+                        <div class="stat-info">
+                            <span class="stat-value" id="statProtected">OK</span>
+                            <span class="stat-label">Servidor Protegido</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Recent Activity -->
+                <div class="activity-section">
+                    <h2><i class="fas fa-clock"></i> Actividad Reciente</h2>
+                    <div class="activity-feed" id="recentActivity">
+                        <div class="activity-item">
+                            <span class="activity-icon detection"><i class="fas fa-exclamation-triangle"></i></span>
+                            <span class="activity-text">Esperando eventos...</span>
+                            <span class="activity-time">-</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Detection Types Chart -->
+                <div class="charts-grid">
+                    <div class="chart-card">
+                        <h3><i class="fas fa-chart-pie"></i> Detecciones por Tipo</h3>
+                        <div id="detectionTypesChart" class="chart-container"></div>
+                    </div>
+                    <div class="chart-card">
+                        <h3><i class="fas fa-chart-line"></i> Detecciones Últimas 24h</h3>
+                        <div id="detections24hChart" class="chart-container"></div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Detections Page -->
+            <section id="page-detections" class="page">
+                <div class="page-header">
+                    <h1><i class="fas fa-exclamation-triangle"></i> Detecciones</h1>
+                    <div class="header-actions">
+                        <select id="detectionFilter" class="select-styled" onchange="filterDetections()">
+                            <option value="all">Todas</option>
+                            <option value="teleport">Teleport</option>
+                            <option value="noclip">Noclip</option>
+                            <option value="speedhack">Speedhack</option>
+                            <option value="godmode">Godmode</option>
+                            <option value="weapon">Armas</option>
+                            <option value="vehicle">Vehículos</option>
+                        </select>
+                        <button class="btn btn-primary" onclick="loadDetections()"><i
+                                class="fas fa-sync-alt"></i></button>
+                    </div>
+                </div>
+                <div class="table-container">
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th>Fecha</th>
+                                <th>Jugador</th>
+                                <th>Tipo</th>
+                                <th>Detalles</th>
+                                <th>Castigo</th>
+                                <th>Acciones</th>
+                            </tr>
+                        </thead>
+                        <tbody id="detectionsTableBody"></tbody>
+                    </table>
+                </div>
+            </section>
+
+            <!-- Bans Page -->
+            <section id="page-bans" class="page">
+                <div class="page-header">
+                    <h1><i class="fas fa-ban"></i> Bans</h1>
+                    <div class="header-actions">
+                        <select id="banFilter" class="select-styled">
+                            <option value="active">Activos</option>
+                            <option value="expired">Expirados</option>
+                            <option value="all">Todos</option>
+                        </select>
+                        <button class="btn btn-primary" onclick="loadBans()"><i class="fas fa-sync-alt"></i></button>
+                    </div>
+                </div>
+                <div class="table-container">
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th>Fecha</th>
+                                <th>Jugador</th>
+                                <th>Razón</th>
+                                <th>Duración</th>
+                                <th>Estado</th>
+                                <th>Acciones</th>
+                            </tr>
+                        </thead>
+                        <tbody id="bansTableBody"></tbody>
+                    </table>
+                </div>
+            </section>
+
+            <!-- Warnings Page -->
+            <section id="page-warnings" class="page">
+                <div class="page-header">
+                    <h1><i class="fas fa-exclamation-circle"></i> Warnings</h1>
+                    <button class="btn btn-primary" onclick="loadWarnings()"><i class="fas fa-sync-alt"></i></button>
+                </div>
+                <div class="table-container">
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th>Fecha</th>
+                                <th>Jugador</th>
+                                <th>Razón</th>
+                                <th>Dado por</th>
+                                <th>Expira</th>
+                                <th>Acciones</th>
+                            </tr>
+                        </thead>
+                        <tbody id="warningsTableBody"></tbody>
+                    </table>
+                </div>
+            </section>
+
+            <!-- Suspicious Players -->
+            <section id="page-suspicious" class="page">
+                <div class="page-header">
+                    <h1><i class="fas fa-user-secret"></i> Jugadores Sospechosos</h1>
+                    <button class="btn btn-primary" onclick="loadSuspicious()"><i class="fas fa-sync-alt"></i></button>
+                </div>
+                <div class="suspicious-grid" id="suspiciousGrid">
+                    <!-- Player cards rendered here -->
+                </div>
+            </section>
+
+            <!-- Real-time Events -->
+            <section id="page-realtime" class="page">
+                <div class="page-header">
+                    <h1><i class="fas fa-satellite-dish"></i> Eventos en Tiempo Real</h1>
+                    <div class="realtime-status">
+                        <span id="realtimeIndicator" class="status-dot online"></span>
+                        <span id="realtimeStatus">Conectado</span>
+                    </div>
+                </div>
+                <div class="realtime-feed" id="realtimeFeed">
+                    <div class="realtime-item info">
+                        <span class="realtime-icon"><i class="fas fa-info-circle"></i></span>
+                        <span class="realtime-text">Esperando eventos...</span>
+                        <span class="realtime-time">-</span>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Admin Config - Whitelist, Permissions & Detections -->
+            <section id="page-adminconfig" class="page">
+                <div class="page-header">
+                    <h1><i class="fas fa-user-shield"></i> Configuración de Admin</h1>
+                    <button class="btn btn-primary" onclick="loadAdminConfig()" title="Actualizar"><i class="fas fa-sync-alt"></i> Actualizar</button>
+                </div>
+
+                <div class="admin-config-tabs">
+                    <button class="config-tab active" onclick="switchConfigTab('whitelist')">
+                        <i class="fas fa-user-check"></i> Whitelist
+                    </button>
+                    <button class="config-tab" onclick="switchConfigTab('permissions')">
+                        <i class="fas fa-key"></i> Permisos
+                    </button>
+                    <button class="config-tab" onclick="switchConfigTab('detections')">
+                        <i class="fas fa-shield-alt"></i> Detecciones
+                    </button>
+                </div>
+
+                <!-- Whitelist Tab -->
+                <div id="config-whitelist" class="config-tab-content active">
+                    <div class="settings-grid">
+                        <!-- Add to Whitelist -->
+                        <div class="settings-card">
+                            <h3><i class="fas fa-user-plus"></i> Añadir a Whitelist</h3>
+                            <div class="setting-item">
+                                <label>Identifier del jugador</label>
+                                <input type="text" id="whitelistIdentifier" placeholder="license:xxx o steam:xxx o discord:xxx" class="input-full" title="Identifier del jugador">
+                            </div>
+                            <div class="setting-item">
+                                <label>Nombre (referencia)</label>
+                                <input type="text" id="whitelistName" placeholder="Nombre del jugador" class="input-full" title="Nombre del jugador">
+                            </div>
+                            <div class="setting-item">
+                                <label>Nivel de inmunidad</label>
+                                <select id="whitelistLevel" class="select-styled" title="Nivel de inmunidad">
+                                    <option value="full">Inmunidad Total</option>
+                                    <option value="vip">VIP (Reducida)</option>
+                                    <option value="none">Sin inmunidad</option>
+                                </select>
+                            </div>
+                            <div class="setting-item">
+                                <label>Notas</label>
+                                <textarea id="whitelistNotes" placeholder="Notas opcionales..." class="input-full" rows="2" title="Notas sobre el jugador"></textarea>
+                            </div>
+                            <button class="btn btn-success btn-full" onclick="addToWhitelist()">
+                                <i class="fas fa-plus"></i> Añadir a Whitelist
+                            </button>
+                        </div>
+
+                        <!-- Current Whitelist -->
+                        <div class="settings-card">
+                            <h3><i class="fas fa-list"></i> Whitelist Actual</h3>
+                            <div class="whitelist-list" id="whitelistList">
+                                <div class="loading-placeholder">Cargando...</div>
+                            </div>
+                        </div>
+
+                        <!-- Immune Groups -->
+                        <div class="settings-card">
+                            <h3><i class="fas fa-users-cog"></i> Grupos Inmunes (ESX)</h3>
+                            <p class="setting-description">Grupos de ESX con inmunidad total al anticheat</p>
+                            <div class="checkbox-grid" id="immuneGroupsGrid">
+                                <label class="checkbox-item">
+                                    <input type="checkbox" id="group_superadmin" onchange="updateImmuneGroups()">
+                                    <span>superadmin</span>
+                                </label>
+                                <label class="checkbox-item">
+                                    <input type="checkbox" id="group_admin" onchange="updateImmuneGroups()">
+                                    <span>admin</span>
+                                </label>
+                                <label class="checkbox-item">
+                                    <input type="checkbox" id="group_mod" onchange="updateImmuneGroups()">
+                                    <span>mod</span>
+                                </label>
+                                <label class="checkbox-item">
+                                    <input type="checkbox" id="group_owner" onchange="updateImmuneGroups()">
+                                    <span>owner</span>
+                                </label>
+                                <label class="checkbox-item">
+                                    <input type="checkbox" id="group_helper" onchange="updateImmuneGroups()">
+                                    <span>helper</span>
+                                </label>
+                            </div>
+                            <button class="btn btn-primary btn-full" onclick="saveImmuneGroups()">
+                                <i class="fas fa-save"></i> Guardar Grupos
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Permissions Tab -->
+                <div id="config-permissions" class="config-tab-content">
+                    <div class="settings-grid">
+                        <!-- ACE Permissions -->
+                        <div class="settings-card">
+                            <h3><i class="fas fa-key"></i> Permisos ACE</h3>
+                            <p class="setting-description">Configura los permisos ACE que dan inmunidad</p>
+                            <div class="permission-list">
+                                <div class="permission-item">
+                                    <span class="perm-name">lyxguard.immune</span>
+                                    <span class="perm-desc">Inmunidad total a todas las detecciones</span>
+                                </div>
+                                <div class="permission-item">
+                                    <span class="perm-name">lyxguard.admin</span>
+                                    <span class="perm-desc">Acceso al panel + inmunidad</span>
+                                </div>
+                                <div class="permission-item">
+                                    <span class="perm-name">lyxguard.bypass</span>
+                                    <span class="perm-desc">Bypass de detecciones específicas</span>
+                                </div>
+                            </div>
+                            <div class="info-box">
+                                <i class="fas fa-info-circle"></i>
+                                Para añadir permisos ACE, edita tu <code>server.cfg</code>:<br>
+                                <code>add_ace identifier.license:xxx lyxguard.admin allow</code>
+                            </div>
+                        </div>
+
+                        <!-- VIP Settings -->
+                        <div class="settings-card">
+                            <h3><i class="fas fa-star"></i> Configuración VIP</h3>
+                            <div class="setting-item toggle">
+                                <label>Sistema VIP Activo</label>
+                                <input type="checkbox" id="vipEnabled" checked>
+                            </div>
+                            <div class="setting-item">
+                                <label>Multiplicador de Tolerancia VIP</label>
+                                <input type="number" id="vipTolerance" value="2.0" min="1" max="10" step="0.5" title="Multiplicador de tolerancia">
+                            </div>
+                            <h4>Detecciones Ignoradas para VIPs</h4>
+                            <div class="checkbox-grid" id="vipIgnoredDetections">
+                                <label class="checkbox-item">
+                                    <input type="checkbox" checked> teleport
+                                </label>
+                                <label class="checkbox-item">
+                                    <input type="checkbox" checked> noclip
+                                </label>
+                                <label class="checkbox-item">
+                                    <input type="checkbox" checked> speedhack
+                                </label>
+                                <label class="checkbox-item">
+                                    <input type="checkbox" checked> godmode
+                                </label>
+                                <label class="checkbox-item">
+                                    <input type="checkbox" checked> flyhack
+                                </label>
+                                <label class="checkbox-item">
+                                    <input type="checkbox"> injection
+                                </label>
+                                <label class="checkbox-item">
+                                    <input type="checkbox"> explosion
+                                </label>
+                            </div>
+                            <button class="btn btn-primary btn-full" onclick="saveVipSettings()">
+                                <i class="fas fa-save"></i> Guardar Config VIP
+                            </button>
+                        </div>
+
+                        <!-- txAdmin Settings -->
+                        <div class="settings-card">
+                            <h3><i class="fas fa-server"></i> Integración txAdmin</h3>
+                            <div class="setting-item toggle">
+                                <label>Admins de txAdmin son inmunes</label>
+                                <input type="checkbox" id="txAdminImmune">
+                            </div>
+                            <p class="setting-description warning">
+                                <i class="fas fa-exclamation-triangle"></i>
+                                No recomendado para testing - los admins de txAdmin saltarán todas las detecciones.
+                            </p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Detections Tab -->
+                <div id="config-detections" class="config-tab-content">
+                    <div class="settings-grid detections-grid">
+                        <!-- Movement Detections -->
+                        <div class="settings-card detection-category">
+                            <h3><i class="fas fa-running"></i> Movimiento</h3>
+                            <div class="detection-list">
+                                <div class="detection-item">
+                                    <div class="detection-header">
+                                        <label class="toggle-switch">
+                                            <input type="checkbox" id="det_teleport" checked>
+                                            <span class="slider"></span>
+                                        </label>
+                                        <span class="detection-name">Anti-Teleport</span>
+                                    </div>
+                                    <select class="punishment-select" id="pun_teleport" title="Castigo">
+                                        <option value="notify" selected>Notificar</option>
+                                        <option value="warn">Warn</option>
+                                        <option value="kick">Kick</option>
+                                        <option value="ban_temp">Ban Temp</option>
+                                    </select>
+                                </div>
+                                <div class="detection-item">
+                                    <div class="detection-header">
+                                        <label class="toggle-switch">
+                                            <input type="checkbox" id="det_noclip" checked>
+                                            <span class="slider"></span>
+                                        </label>
+                                        <span class="detection-name">Anti-Noclip</span>
+                                    </div>
+                                    <select class="punishment-select" id="pun_noclip" title="Castigo">
+                                        <option value="warn" selected>Warn</option>
+                                        <option value="kick">Kick</option>
+                                        <option value="ban_temp">Ban Temp</option>
+                                    </select>
+                                </div>
+                                <div class="detection-item">
+                                    <div class="detection-header">
+                                        <label class="toggle-switch">
+                                            <input type="checkbox" id="det_speedhack" checked>
+                                            <span class="slider"></span>
+                                        </label>
+                                        <span class="detection-name">Anti-SpeedHack</span>
+                                    </div>
+                                    <select class="punishment-select" id="pun_speedhack" title="Castigo">
+                                        <option value="kick" selected>Kick</option>
+                                        <option value="ban_temp">Ban Temp</option>
+                                    </select>
+                                </div>
+                                <div class="detection-item">
+                                    <div class="detection-header">
+                                        <label class="toggle-switch">
+                                            <input type="checkbox" id="det_flyhack" checked>
+                                            <span class="slider"></span>
+                                        </label>
+                                        <span class="detection-name">Anti-FlyHack</span>
+                                    </div>
+                                    <select class="punishment-select" id="pun_flyhack" title="Castigo">
+                                        <option value="warn" selected>Warn</option>
+                                        <option value="kick">Kick</option>
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Combat Detections -->
+                        <div class="settings-card detection-category">
+                            <h3><i class="fas fa-crosshairs"></i> Combate</h3>
+                            <div class="detection-list">
+                                <div class="detection-item">
+                                    <div class="detection-header">
+                                        <label class="toggle-switch">
+                                            <input type="checkbox" id="det_godmode" checked>
+                                            <span class="slider"></span>
+                                        </label>
+                                        <span class="detection-name">Anti-GodMode</span>
+                                    </div>
+                                    <select class="punishment-select" id="pun_godmode" title="Castigo">
+                                        <option value="ban_temp" selected>Ban Temp</option>
+                                        <option value="ban_perm">Ban Perm</option>
+                                    </select>
+                                </div>
+                                <div class="detection-item">
+                                    <div class="detection-header">
+                                        <label class="toggle-switch">
+                                            <input type="checkbox" id="det_healthhack" checked>
+                                            <span class="slider"></span>
+                                        </label>
+                                        <span class="detection-name">Anti-HealthHack</span>
+                                    </div>
+                                    <select class="punishment-select" id="pun_healthhack" title="Castigo">
+                                        <option value="kill" selected>Matar</option>
+                                        <option value="kick">Kick</option>
+                                    </select>
+                                </div>
+                                <div class="detection-item">
+                                    <div class="detection-header">
+                                        <label class="toggle-switch">
+                                            <input type="checkbox" id="det_aimbot" checked>
+                                            <span class="slider"></span>
+                                        </label>
+                                        <span class="detection-name">Anti-Aimbot</span>
+                                    </div>
+                                    <select class="punishment-select" id="pun_aimbot" title="Castigo">
+                                        <option value="ban_temp" selected>Ban Temp</option>
+                                        <option value="ban_perm">Ban Perm</option>
+                                    </select>
+                                </div>
+                                <div class="detection-item">
+                                    <div class="detection-header">
+                                        <label class="toggle-switch">
+                                            <input type="checkbox" id="det_rapidfire" checked>
+                                            <span class="slider"></span>
+                                        </label>
+                                        <span class="detection-name">Anti-RapidFire</span>
+                                    </div>
+                                    <select class="punishment-select" id="pun_rapidfire" title="Castigo">
+                                        <option value="ban_temp" selected>Ban Temp</option>
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Entity Detections -->
+                        <div class="settings-card detection-category">
+                            <h3><i class="fas fa-car"></i> Entidades</h3>
+                            <div class="detection-list">
+                                <div class="detection-item">
+                                    <div class="detection-header">
+                                        <label class="toggle-switch">
+                                            <input type="checkbox" id="det_explosion" checked>
+                                            <span class="slider"></span>
+                                        </label>
+                                        <span class="detection-name">Anti-Explosion</span>
+                                    </div>
+                                    <select class="punishment-select" id="pun_explosion" title="Castigo">
+                                        <option value="ban_temp" selected>Ban Temp</option>
+                                        <option value="ban_perm">Ban Perm</option>
+                                    </select>
+                                </div>
+                                <div class="detection-item">
+                                    <div class="detection-header">
+                                        <label class="toggle-switch">
+                                            <input type="checkbox" id="det_vehiclegodmode" checked>
+                                            <span class="slider"></span>
+                                        </label>
+                                        <span class="detection-name">Anti-VehicleGodMode</span>
+                                    </div>
+                                    <select class="punishment-select" id="pun_vehiclegodmode" title="Castigo">
+                                        <option value="kick" selected>Kick</option>
+                                    </select>
+                                </div>
+                                <div class="detection-item">
+                                    <div class="detection-header">
+                                        <label class="toggle-switch">
+                                            <input type="checkbox" id="det_antiyank" checked>
+                                            <span class="slider"></span>
+                                        </label>
+                                        <span class="detection-name">Anti-Yank</span>
+                                    </div>
+                                    <select class="punishment-select" id="pun_antiyank" title="Castigo">
+                                        <option value="warn" selected>Warn</option>
+                                        <option value="kick">Kick</option>
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Injection Detections -->
+                        <div class="settings-card detection-category">
+                            <h3><i class="fas fa-syringe"></i> Inyección</h3>
+                            <div class="detection-list">
+                                <div class="detection-item">
+                                    <div class="detection-header">
+                                        <label class="toggle-switch">
+                                            <input type="checkbox" id="det_injection" checked>
+                                            <span class="slider"></span>
+                                        </label>
+                                        <span class="detection-name">Anti-Injection</span>
+                                    </div>
+                                    <select class="punishment-select" id="pun_injection" title="Castigo">
+                                        <option value="ban_perm" selected>Ban Perm</option>
+                                    </select>
+                                </div>
+                                <div class="detection-item">
+                                    <div class="detection-header">
+                                        <label class="toggle-switch">
+                                            <input type="checkbox" id="det_executor" checked>
+                                            <span class="slider"></span>
+                                        </label>
+                                        <span class="detection-name">Anti-Executor</span>
+                                    </div>
+                                    <select class="punishment-select" id="pun_executor" title="Castigo">
+                                        <option value="ban_perm" selected>Ban Perm</option>
+                                    </select>
+                                </div>
+                                <div class="detection-item">
+                                    <div class="detection-header">
+                                        <label class="toggle-switch">
+                                            <input type="checkbox" id="det_eventspam" checked>
+                                            <span class="slider"></span>
+                                        </label>
+                                        <span class="detection-name">Anti-EventSpam</span>
+                                    </div>
+                                    <select class="punishment-select" id="pun_eventspam" title="Castigo">
+                                        <option value="kick" selected>Kick</option>
+                                        <option value="ban_temp">Ban Temp</option>
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="detection-actions">
+                        <button class="btn btn-success" onclick="saveDetectionSettings()">
+                            <i class="fas fa-save"></i> Guardar Configuración de Detecciones
+                        </button>
+                        <button class="btn btn-warning" onclick="resetDetectionDefaults()">
+                            <i class="fas fa-undo"></i> Restaurar Valores por Defecto
+                        </button>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Settings -->
+            <section id="page-settings" class="page">
+                <div class="page-header">
+                    <h1><i class="fas fa-cog"></i> Configuración</h1>
+                </div>
+                <div class="settings-grid">
+                    <div class="settings-card">
+                        <h3><i class="fab fa-discord"></i> Webhooks</h3>
+                        <div class="setting-item">
+                            <label>Webhook Detecciones</label>
+                            <input type="text" id="webhookDetections" placeholder="https://discord.com/api/webhooks/..."
+                                class="input-full">
+                        </div>
+                        <div class="setting-item">
+                            <label>Webhook Bans</label>
+                            <input type="text" id="webhookBans" placeholder="https://discord.com/api/webhooks/..."
+                                class="input-full">
+                        </div>
+                        <div class="setting-item">
+                            <label>Webhook Warnings</label>
+                            <input type="text" id="webhookWarnings" placeholder="https://discord.com/api/webhooks/..."
+                                class="input-full">
+                        </div>
+                        <div class="setting-item">
+                            <label>Webhook Alertas Críticas</label>
+                            <input type="text" id="webhookAlerts" placeholder="https://discord.com/api/webhooks/..."
+                                class="input-full">
+                        </div>
+                        <button class="btn btn-primary btn-full" onclick="saveWebhooks()">Guardar Webhooks</button>
+                    </div>
+
+                    <div class="settings-card">
+                        <h3><i class="fas fa-sliders-h"></i> Opciones</h3>
+                        <div class="setting-item toggle">
+                            <label>Notificaciones en panel</label>
+                            <input type="checkbox" id="optNotifications" checked>
+                        </div>
+                        <div class="setting-item toggle">
+                            <label>Sonido en detecciones</label>
+                            <input type="checkbox" id="optSound" checked>
+                        </div>
+                        <div class="setting-item toggle">
+                            <label>Auto-refresh datos</label>
+                            <input type="checkbox" id="optAutoRefresh" checked>
+                        </div>
+                        <div class="setting-item">
+                            <label>Intervalo refresh (segundos)</label>
+                            <input type="number" id="optRefreshInterval" value="30" min="5" max="300">
+                        </div>
+                    </div>
+
+                    <div class="settings-card danger-zone">
+                        <h3><i class="fas fa-trash-alt"></i> Gestión de Logs</h3>
+                        <p class="setting-description">Limpia los registros del anticheat. Esta acción no se puede
+                            deshacer.</p>
+
+                        <div class="setting-item">
+                            <label>Limpiar logs de jugador específico</label>
+                            <div class="input-group">
+                                <input type="text" id="clearPlayerIdentifier" placeholder="license:xxxxx o steam:xxxxx"
+                                    class="input-full">
+                                <button class="btn btn-warning" onclick="clearPlayerLogs()">
+                                    <i class="fas fa-user-times"></i> Limpiar
+                                </button>
+                            </div>
+                        </div>
+
+                        <div class="setting-item">
+                            <label>Limpiar logs antiguos</label>
+                            <div class="input-group">
+                                <select id="clearOldDays" class="select-styled">
+                                    <option value="7">Más de 7 días</option>
+                                    <option value="14">Más de 14 días</option>
+                                    <option value="30" selected>Más de 30 días</option>
+                                    <option value="60">Más de 60 días</option>
+                                    <option value="90">Más de 90 días</option>
+                                </select>
+                                <button class="btn btn-warning" onclick="clearOldLogs()">
+                                    <i class="fas fa-calendar-times"></i> Limpiar
+                                </button>
+                            </div>
+                        </div>
+
+                        <hr class="danger-divider">
+
+                        <div class="setting-item">
+                            <label><i class="fas fa-exclamation-triangle"></i> Zona de Peligro</label>
+                        </div>
+
+                        <button class="btn btn-danger btn-full" onclick="clearAllLogsConfirm()">
+                            <i class="fas fa-skull-crossbones"></i> Limpiar TODOS los Logs
+                        </button>
+                    </div>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <!-- Player Detail Modal -->
+    <div id="playerModal" class="modal hidden">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 id="playerModalTitle">Detalles del Jugador</h2>
+                <button class="modal-close" onclick="closePlayerModal()"><i class="fas fa-times"></i></button>
+            </div>
+            <div class="modal-body" id="playerModalBody"></div>
+        </div>
+    </div>
+
+    <!-- Custom Confirm Modal -->
+    <div id="confirmModal" class="modal hidden">
+        <div class="modal-content modal-sm">
+            <div class="modal-header modal-header-warning">
+                <h2 id="confirmModalTitle"><i class="fas fa-exclamation-triangle"></i> Confirmar Acción</h2>
+                <button class="modal-close" onclick="closeConfirmModal()"><i class="fas fa-times"></i></button>
+            </div>
+            <div class="modal-body">
+                <p id="confirmModalMessage" class="confirm-message"></p>
+                <div id="confirmModalInput" class="confirm-input-container hidden">
+                    <label id="confirmModalInputLabel">Escribe el valor:</label>
+                    <input type="text" id="confirmModalInputField" class="input-full" placeholder="">
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="closeConfirmModal()"><i class="fas fa-times"></i>
+                    Cancelar</button>
+                <button class="btn btn-danger" id="confirmModalBtn" onclick="executeConfirmAction()"><i
+                        class="fas fa-check"></i> Confirmar</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Custom Input Modal -->
+    <div id="inputModal" class="modal hidden">
+        <div class="modal-content modal-sm">
+            <div class="modal-header">
+                <h2 id="inputModalTitle"><i class="fas fa-edit"></i> Ingresa información</h2>
+                <button class="modal-close" onclick="closeInputModal()"><i class="fas fa-times"></i></button>
+            </div>
+            <div class="modal-body">
+                <p id="inputModalMessage" class="input-message"></p>
+                <input type="text" id="inputModalField" class="input-full" placeholder="">
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="closeInputModal()"><i class="fas fa-times"></i>
+                    Cancelar</button>
+                <button class="btn btn-primary" onclick="executeInputAction()"><i class="fas fa-check"></i>
+                    Aceptar</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Notification Toast -->
+    <div id="toastContainer"></div>
+
+    <script src="js/app.js"></script>
+</body>
+
+</html>
+
