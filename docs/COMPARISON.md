@@ -69,8 +69,3 @@ Para competir con anticheats fuertes:
 - perfiles de tuning consistentes con carga real
 
 LyxGuard esta construido alrededor de esos principios.
-
-## 6) Referencias (lectura opcional)
-- FiveGuard (safe events): https://docs.fiveguard.net/safe-events/manual-safe-events
-- Tokenizacion open source (idea similar): https://github.com/BrunoTheDev/salty_tokenizer
-
