@@ -36,6 +36,18 @@ Puntos a revisar:
 ## 5) Configuracion basica (defaults)
 Archivo: `config.lua`
 
+### 5.0 Defaults del recurso (stock)
+Estos valores vienen por defecto en el repo (pueden variar si cambias `Config.RuntimeProfile` o presets):
+- `Config.Debug = false`
+- `Config.Locale = 'es'`
+- `Config.ResourceName = 'lyx-guard'`
+- `Config.RuntimeProfile = 'default'`
+- `Config.EventFirewall.enabled = true`
+- `Config.Panel.enabled = true`
+- `Config.Panel.key = 'F8'`
+- `Config.ExhaustiveLogs.enabled = true`
+- `Config.Discord.enabled = true` (webhooks vacios por defecto; completalos si queres notificaciones)
+
 ### 5.1 Perfil runtime
 ```lua
 Config.RuntimeProfile = 'default'
@@ -95,3 +107,9 @@ Si `lyx-panel` NO esta activo:
 - logs exhaustivos activados al menos en fase de estabilizacion
 - `lyx-panel` activo si usas panel in-game
 
+## 9) Desinstalacion / rollback
+1. Sacar de `server.cfg`:
+   - `ensure lyx-guard`
+2. Reiniciar.
+3. (Opcional) conservar DB/logs para auditoria historica. Si queres borrar:
+   - eliminar tablas `lyxguard_*` manualmente (hacer backup primero).

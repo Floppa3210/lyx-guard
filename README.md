@@ -5,7 +5,8 @@
 Anticheat modular **server-first** para FiveM/ESX. Enfoque: bloquear abuso real (spoof de eventos admin, floods, payloads anomales) con trazabilidad exhaustiva y perfiles de carga.
 
 Este recurso esta pensado para funcionar **junto a** `lyx-panel`.
-Puede correr solo, pero para seguridad y cobertura completas se recomienda tener ambos activos (y varias funciones se degradan o se deshabilitan si falta el otro).
+La instalacion soportada/recomendada es **tener ambos activos**: `lyx-guard` + `lyx-panel`.
+Si ejecutas solo uno, el sistema sigue levantando, pero se degradan/inhabilitan funciones dependientes y perdes cobertura de seguridad.
 
 ## Tabla de contenido
 1. Instalacion

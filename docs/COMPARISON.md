@@ -1,4 +1,4 @@
-# LyxGuard - Comparaciones y Alcance
+﻿# LyxGuard - Comparaciones y Alcance
 
 Este documento compara el enfoque de LyxGuard con:
 - anticheats open source 
@@ -35,6 +35,20 @@ En anticheats de internet se repiten patrones peligrosos:
 - ofuscacion extrema sin razon
 - dominios raros y ejecucion remota
 
+Observacion basada en nuestro scan local (carpetas de ejemplos):
+- se detectaron multiples patrones HIGH de "HTTP fetch + ejecucion dinamica"
+- tambien aparecieron muchos indicadores MED/LOW de ofuscacion y telemetria dudosa
+
+Numeros (scan local):
+- archivos marcados: 147
+- coincidencias HIGH: 106
+- coincidencias MED: 821
+- coincidencias LOW: 106
+
+Conclusion practica:
+- no conviene reciclar codigo de loaders/HTTP/exec
+- si se rescatan ideas de detecciones, reescribir y validar del lado server (con schema + rate + logs)
+
 LyxGuard evita esas rutas:
 - no ejecuta codigo descargado
 - no usa `loadstring`
@@ -58,6 +72,9 @@ Diferencia importante:
 - LyxGuard es open source y busca un core seguro y auditable.
 - Features SaaS/comerciales (web panel externo, licencias, ecommerce) no son parte del core.
 
+Detalles publicos (resumen):
+- En guias publicas de FiveGuard se describe el sistema de "safe events" basado en tokens adjuntados a eventos y validacion server-side.
+
 ## 5) Objetivo de calidad (nivel "pro")
 Para competir con anticheats fuertes:
 - server-side authority siempre
@@ -66,4 +83,8 @@ Para competir con anticheats fuertes:
 - perfiles de tuning consistentes con carga real
 
 LyxGuard esta construido alrededor de esos principios.
+
+## 6) Referencias (lectura opcional)
+- FiveGuard (safe events): https://docs.fiveguard.net/guides/safe-events
+- Tokenizacion open source (idea similar): https://github.com/BrunoTheDev/salty_tokenizer
 
