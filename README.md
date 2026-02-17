@@ -1,43 +1,53 @@
 # LyxGuard
 
-Anticheat modular para FiveM (ESX) con enfoque server-first, validacion estricta de eventos y telemetria exhaustiva.
+![LyxGuard Banner](docs/banner.svg)
 
-## Estado
-- Proyecto activo
-- Idioma principal: Espanol
-- Licencia: MIT
+Anticheat modular **server-first** para FiveM/ESX, con firewall de eventos, anti-spoof y trazabilidad exhaustiva.
 
-## Caracteristicas principales
-- Detecciones modulares (movimiento, combate, armas, entidades, inyeccion, eventos).
-- Firewall de eventos en servidor con allowlist + schema validation.
-- Anti-spoof para rutas criticas (token de sesion + nonce + anti-replay).
-- Sistema de riesgo acumulativo y cuarentena progresiva.
-- Bans endurecidos (identificadores multiples, hashes de token, fingerprint).
-- Logging exhaustivo en JSONL y texto, con timeline previo a sancion.
-- Perfiles de ejecucion:
+## Estado del proyecto
+- Licencia: `MIT`
+- Estado: `Activo`
+- Objetivo: reducir abuso real de eventos/admin spoof/economia/entidades
+- Integracion recomendada: `lyx-panel`
+
+## Que incluye
+- Firewall server-side para eventos criticos:
+  - allowlist
+  - schema validation
+  - rate-limit
+  - anti-replay
+- Hardening anti-spoof en rutas sensibles.
+- Score de riesgo acumulativo + cuarentena progresiva.
+- Detecciones por modulos (cliente y servidor), con prioridad server.
+- Honeypots de alta confianza.
+- Logging exhaustivo:
+  - JSONL + texto
+  - timeline previo a warn/ban
+  - correlacion por actor/evento/resultado
+- Perfiles de runtime:
   - `rp_light`
   - `production_high_load`
   - `hostile`
 
 ## Requisitos
-- FiveM server (recomendado artefacto actualizado).
+- FiveM (artefacto actualizado).
 - `es_extended`
 - `oxmysql`
 
-## Instalacion
+## Instalacion rapida
 1. Copiar `lyx-guard` a `resources/[local]/lyx-guard`.
-2. Asegurar dependencias en `server.cfg`:
+2. En `server.cfg`:
 ```cfg
 ensure oxmysql
 ensure es_extended
 ensure lyx-guard
 ```
 3. Reiniciar servidor.
-4. Revisar logs de arranque para confirmar migraciones y modulos.
+4. Revisar logs de inicio y estado de modulos.
 
-## Configuracion rapida
+## Configuracion
 - Archivo principal: `config.lua`
-- Perfil runtime:
+- Perfil recomendado en produccion:
 ```lua
 Config.RuntimeProfile = 'production_high_load'
 ```
@@ -50,26 +60,48 @@ Config.ExhaustiveLogs = {
 }
 ```
 
-## Seguridad (modelo)
-- Todo lo sensible se valida en servidor.
-- El cliente se usa para telemetria y verificaciones auxiliares, no como autoridad.
-- Se bloquea ejecucion dinamica riesgosa (`load`/`loadstring`) en bootstrap.
+## Arquitectura
+```mermaid
+flowchart LR
+  C[Cliente: telemetria + checks] --> S[Servidor: detecciones + firewall]
+  S --> Q[Quarantine / Escalado]
+  S --> P[Punishments / Ban]
+  S --> L[Logs exhaustivos]
+  S --> D[(oxmysql)]
+```
 
-## Estructura
-- `client/` detecciones y telemetria cliente.
-- `server/` sanciones, firewall, detecciones server-side, logs, migraciones.
-- `shared/` utilidades comunes.
-- `html/` interfaz del panel interno de guard.
+## Modelo de seguridad
+- Toda decision critica vive en servidor.
+- El cliente aporta señales y verificacion auxiliar.
+- Eventos anomales de alto riesgo se bloquean antes del handler final.
+- Se evitan rutas dinamicas peligrosas (`load`, `loadstring`, exec remoto).
 
-## Roadmap
-El roadmap de trabajo y decisiones se mantiene en:
-- `README_ROADMAP_CONVERSACION.md` (raiz del workspace de desarrollo)
+## Integracion con LyxPanel
+- Comparticion de contexto de seguridad para auditoria.
+- Dependencia cruzada opcional: al faltar uno, se degradan funciones dependientes.
 
-## Contribuir
-Revisar:
+## Si queres aportar
+Contribuciones tecnicas bienvenidas:
+1. Priorizá cambios pequeños y medibles.
+2. Si agregas deteccion, inclui:
+   - calibracion de umbral
+   - metadatos de log
+   - plan anti-falsos positivos
+3. Mantene compatibilidad con perfiles runtime.
+
+Ver:
 - `CONTRIBUTING.md`
 - `SECURITY.md`
 
-## Licencia
-Este proyecto se distribuye bajo licencia MIT. Ver `LICENSE`.
+## Roadmap y contexto
+- Roadmap conversacional principal: `../README_ROADMAP_CONVERSACION.md`
 
+## Checklist de release recomendado
+- Perfiles revisados (`rp_light`, `production_high_load`, `hostile`)
+- Eventos criticos con schema/rate-limit/permiso
+- Logging exhaustivo funcionando
+- Retencion/rotacion de logs validada
+- Plan de rollback definido
+
+## Licencia
+MIT. Ver `LICENSE`.

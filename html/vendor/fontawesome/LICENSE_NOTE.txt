@@ -1,0 +1,11 @@
+Font Awesome (Free) - Vendored Assets
+
+This folder includes a copy of Font Awesome Free CSS + webfonts to avoid external
+CDN dependencies in production (offline-friendly NUI).
+
+License:
+- Font Awesome Free (icons/fonts): https://fontawesome.com/license/free
+
+Notes:
+- Only static assets are vendored here (CSS + webfonts).
+- No JS loaders or remote fetch logic is used.
