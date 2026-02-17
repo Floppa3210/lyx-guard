@@ -1,132 +1,129 @@
+<div align="center">
+
 # LyxGuard
 
-![LyxGuard Banner](docs/banner.svg)
+<img src="docs/banner.svg" alt="LyxGuard Banner" width="720" />
 
-Anticheat modular **server-first** para FiveM/ESX. Enfoque: bloquear abuso real (spoof de eventos admin, floods, payloads anomales) con trazabilidad exhaustiva y perfiles de carga.
+### Anticheat modular **server-first** para FiveM/ESX
 
-Este recurso esta pensado para funcionar **junto a** `lyx-panel`.
-La instalacion soportada/recomendada es **tener ambos activos**: `lyx-guard` + `lyx-panel`.
-Si ejecutas solo uno, el sistema sigue levantando, pero se degradan/inhabilitan funciones dependientes y perdes cobertura de seguridad.
+<p align="center">
+  <strong>Anti-spoof</strong> • <strong>Firewall de eventos</strong> • <strong>Quarantine</strong> • <strong>Logs exhaustivos</strong>
+</p>
 
-## Tabla de contenido
-1. Instalacion
-2. Configuracion (defaults)
-3. Seguridad (modelo y garantias)
-4. Sistema de sanciones (warn/quarantine/ban)
-5. Logging exhaustivo (archivos locales)
-6. Perfiles de runtime
-7. Integracion con LyxPanel
-8. Troubleshooting
-9. QA offline
-10. Mapa del proyecto
-11. Docs
+<p align="center">
+  <a href="docs/INSTALL_SERVER.md">📦 Instalacion</a> •
+  <a href="docs/DEEP_DIVE.md">🔬 Deep Dive</a> •
+  <a href="docs/CONFIG_REFERENCE.md">⚙️ Config</a> •
+  <a href="docs/COMPARISON.md">🆚 Comparaciones</a>
+</p>
 
-## Requisitos
-- FiveM (artefacto actualizado).
-- `es_extended`
-- `oxmysql`
-- Recomendado: `lyx-panel`
+[![License](https://img.shields.io/badge/license-MIT-blue.svg?style=for-the-badge)](LICENSE)
+![FiveM](https://img.shields.io/badge/FiveM-resource-black?style=for-the-badge)
+![ESX](https://img.shields.io/badge/ESX-supported-green?style=for-the-badge)
+[![CI](https://img.shields.io/github/actions/workflow/status/Floppa3210/lyx-guard/qa.yml?style=for-the-badge)](https://github.com/Floppa3210/lyx-guard/actions/workflows/qa.yml)
+[![Stars](https://img.shields.io/github/stars/Floppa3210/lyx-guard?style=for-the-badge&logo=github)](https://github.com/Floppa3210/lyx-guard/stargazers)
 
-## Instalacion (paso a paso)
-1. Copiar carpeta `lyx-guard` a:
-   - `resources/[local]/lyx-guard`
-2. Asegurar orden en `server.cfg`:
+</div>
+
+---
+
+## Estado del proyecto
+- Licencia: `MIT`
+- Estado: `Activo`
+- Enfoque: bloquear abuso real (spoof admin, flood, payloads anomales) y dejar evidencia trazable
+- Instalacion recomendada: **`lyx-guard` + `lyx-panel` juntos**
+
+> Importante: podes ejecutar `lyx-guard` solo, pero la instalacion soportada/recomendada es tener ambos activos (`lyx-guard` + `lyx-panel`). Si falta uno, hay degradacion/inhabilitacion de features dependientes y perdes cobertura/correlacion.
+
+## Que incluye (resumen)
+- Firewall server-side:
+  - allowlist
+  - schema validation
+  - rate-limit
+  - anti-replay en rutas sensibles
+- Anti-spoof:
+  - intento de ejecutar eventos admin (LyxPanel/txAdmin/recursos sensibles) sin permisos
+- Score de riesgo + quarantine progresiva (reduce falsos positivos).
+- Logging exhaustivo a archivos:
+  - JSONL + texto
+  - timeline previo a warn/ban
+  - correlation_id
+- Perfiles runtime:
+  - `rp_light`
+  - `production_high_load`
+  - `hostile`
+
+<div align="center">
+
+## Por que usar LyxGuard
+
+</div>
+
+<table>
+<tr>
+<td width="50%">
+
+### Server-first (lo que importa)
+
+```text
+- Bloqueo antes del handler (pre-handler)
+- Anti-spoof de eventos admin
+- Payload hygiene (deep tables / strings enormes)
+```
+
+</td>
+<td width="50%">
+
+### Evidencia y operacion
+
+```text
+- Logs exhaustivos (JSONL + timeline)
+- Quarantine/escalado (menos falsos positivos)
+- Perfiles runtime (rp_light/high_load/hostile)
+```
+
+</td>
+</tr>
+</table>
+
+## Instalacion rapida
+1. Copiar `lyx-guard` a `resources/[local]/lyx-guard`.
+2. Recomendado: copiar `lyx-panel` a `resources/[local]/lyx-panel`.
+3. En `server.cfg`:
 ```cfg
 ensure oxmysql
 ensure es_extended
 ensure lyx-guard
 ensure lyx-panel
 ```
-3. Reiniciar el servidor.
-4. Verificar consola:
-   - migraciones (LyxGuard aplica migraciones versionadas)
-   - estado del firewall
-   - carga de modulos
+4. Reiniciar y revisar consola (migraciones + firewall + modulos).
 
-## Configuracion (defaults importantes)
+Guia completa:
+- `docs/INSTALL_SERVER.md`
+
+## Configuracion (entry points)
 Archivo: `config.lua`
 
-### Perfil de runtime (tuning)
+Perfil runtime:
 ```lua
--- Valores: default | rp_light | production_high_load | hostile
-Config.RuntimeProfile = 'production_high_load'
+Config.RuntimeProfile = 'default' -- rp_light | production_high_load | hostile
 ```
 
-### Firewall de eventos / trigger protection
-LyxGuard protege server-side:
-- allowlist de namespaces/eventos
-- schema validation (tipos/rangos/longitudes)
-- rate-limit por jugador/evento
-- anti-replay para acciones sensibles
-
-Los limites exactos dependen del perfil.
-Guia recomendada:
-- `docs/operations/PRODUCCION_ALTA_CARGA.md`
-
-### Logging exhaustivo (archivos locales)
+Logging exhaustivo:
 ```lua
-Config.ExhaustiveLogs = {
-  enabled = true,
-  writeJsonl = true,
-  writeText = true
-}
+Config.ExhaustiveLogs.enabled = true
 ```
 
-Salida:
-- carpeta: `logs/`
-- incluye timeline previo a warn/ban y correlation_id
+Referencia completa de opciones:
+- `docs/CONFIG_REFERENCE.md`
 
-## Seguridad (modelo y garantias)
-Principios:
-- **Server-authoritative**: el servidor decide; el cliente aporta senales auxiliares.
-- Bloqueo antes del handler final para eventos anomales de alto riesgo.
-- Sin rutas peligrosas de ejecucion dinamica (`load`, `loadstring`, exec remoto).
-
-Anti-spoof:
-- deteccion de ejecucion de eventos admin (LyxPanel/txAdmin) por jugadores sin permisos
-- validacion de payloads
-- escalado por reincidencia (segun perfil)
-
-## Sistema de sanciones (warn -> quarantine -> ban)
-LyxGuard implementa:
-- score/riesgo acumulativo
-- cooldowns por razon
-- cuarentena progresiva para casos grises
-- evidencia (logs + timeline) para revisiones
-
-La politica exacta (duraciones, escalado) se ajusta en `config.lua`.
-
-## Perfiles de runtime
-Valores:
-- `rp_light`: tolerante, menos agresivo
-- `production_high_load`: para servidores con picos altos de eventos
-- `hostile`: mas cerrado, pensado para entornos con spoof/flood
-
-Guia con valores exactos:
-- `docs/operations/PRODUCCION_ALTA_CARGA.md`
-
-## Integracion con LyxPanel
-Cuando ambos estan activos:
-- mejor auditoria (panel + guard con correlation_id)
-- mejor respuesta a spoof de acciones admin
-- degradacion controlada: si falta uno, se deshabilitan features dependientes y se notifica
-
-## Troubleshooting (comun)
-1. Bans/flags inesperados:
-   - bajar agresividad: usar `rp_light` o subir limites en `production_high_load`
-   - revisar logs exhaustivos (timeline previo)
-2. Alto ruido por eventos legitimos:
-   - subir `massiveTriggersPerMinute` y los limites del firewall (ver docs de operaciones)
-3. No aparecen logs:
-   - confirmar `Config.ExhaustiveLogs.enabled = true`
-   - verificar permisos de escritura del recurso (carpeta `logs/`)
-
-## QA offline (antes de release)
+## Testing / QA offline
+Check de cobertura de schemas/allowlists (recomendado antes de release):
 ```bash
 node tools/qa/check_events.js
 ```
 
-## Mapa del proyecto (estructura)
+## Estructura del proyecto
 ```text
 lyx-guard/
   fxmanifest.lua
@@ -135,76 +132,25 @@ lyx-guard/
   LICENSE
   SECURITY.md
   CONTRIBUTING.md
-  .gitignore
 
-  server/
-    main.lua
-    bootstrap.lua
-    trigger_protection.lua
-    detections.lua
-    punishments.lua
-    quarantine.lua
-    ban_system.lua
-    exhaustive_logs.lua
-    connection_security.lua
-    panel.lua
-    admin_config.lua
-    migrations.lua
-    utils.lua
-    webhooks.lua
-
-  client/
-    main.lua
-    core.lua
-    panel.lua
-    protection_loader.lua
-    protection_registrar.lua
-    detections/*.lua
-    protections/*.lua
-
-  shared/
-    lib.lua
-    functions.lua
-    structured_logger.lua
-    blacklists/*.lua
-
-  database/
-    database.sql
-    database_reset.sql
-
-  logs/
-    .gitkeep
-
-  html/
-    index.html
-    css/style.css
-    js/app.js
-    vendor/fontawesome/...
-
-  tools/
-    qa/check_events.js
-
-  docs/
-    banner.svg
-    INSTALL_SERVER.md
-    DEEP_DIVE.md
-    COMPARISON.md
+  server/         # trigger protection + sanciones + logs
+  client/         # checks auxiliares (no authority)
+  shared/         # utilidades + blacklists + logger
+  database/       # SQL legacy (si aplica)
+  logs/           # salida runtime (gitkeep)
+  html/           # UI (si aplica)
+  tools/qa/       # checks offline
+  docs/           # documentacion
 ```
 
-## Docs
-- Instalacion y configuracion (servidor): `docs/INSTALL_SERVER.md`
-- Como funciona (profundidad): `docs/DEEP_DIVE.md`
-- Comparaciones (otros anticheats y enfoque): `docs/COMPARISON.md`
-
 ## Contribuir
-Contribuciones tecnicas bienvenidas:
-- cambios pequenos y revisables
-- si agregas deteccion: umbral + metadata de log + plan anti falsos positivos
+Si queres aportar:
+- Prioriza cambios pequenos y medibles.
+- Si agregas deteccion:
+  - umbral
+  - metadata de log
+  - plan anti falsos positivos
 
 Ver:
 - `CONTRIBUTING.md`
 - `SECURITY.md`
-
-## Licencia
-MIT. Ver `LICENSE`.
-

@@ -4,6 +4,58 @@ Este documento compara el enfoque de LyxGuard con:
 - anticheats open source 
 - anticheats de pago conocidos (referencia: FiveGuard y similares)
 
+## 0) Matriz comparativa (10 anticheats vs LyxGuard)
+
+Notas importantes:
+- Esta tabla mezcla (a) info publica/documentada y (b) observaciones de ejemplos locales.
+- En anticheats de pago, el feature-set real puede variar por plan/version: valida en sus docs oficiales.
+- En anticheats open source "de internet", hay forks infectados/obsoletos: no copiar loaders ni exec remoto.
+
+Leyenda:
+- `SI`: existe/documentado claramente
+- `PARCIAL`: existe, pero depende de implementacion/plan/integ
+- `?`: no confirmado
+- `RIESGO`: en ejemplos locales detectamos patrones peligrosos (HTTP+exec, ofuscacion, etc)
+
+### A) Anticheats (publicos) - 10 vs LyxGuard
+
+| Producto | Tipo | Safe events/token | Payload hygiene/schema | Rate-limit | Logs/evidencia | Panel | Nota rapida |
+|---|---|---|---|---|---|---|---|
+| **LyxGuard (este repo)** | OSS | SI (panel+acciones criticas) | SI | SI | SI (JSONL + timeline) | In-game (opcional) | Server-first, trazabilidad y quarantine |
+| FiveGuard | Pago | SI (Safe Events documentado) | ? | ? | ? | Web/Panel | Enfoque fuerte en safe-events; ver docs |
+| FiniAC | Pago | ? | ? | ? | ? | Web/Panel | Suite con docs publicas; ver docs |
+| WaveShield | Pago | ? | ? | ? | ? | Web/Panel | Suite orientada a panel web; ver docs |
+| SpaceShield | Pago | ? | ? | ? | ? | Web/Panel | Producto comercial; ver sitio oficial |
+| VanillaAC | ? | ? | ? | ? | ? | ? | Info publica limitada; validar por fuentes |
+| Valor Shield | Pago | ? | ? | ? | ? | Web/Panel | Producto comercial; validar por fuentes |
+| FiveM Secure | ? | ? | ? | ? | ? | ? | Producto/servicio; validar por fuentes |
+| MegaAC | Pago | ? | ? | ? | ? | Web/Panel | Producto comercial; validar por fuentes |
+| TrueWard | Pago | ? | ? | ? | ? | Web/Panel | Producto comercial; validar por fuentes |
+
+### B) Ejemplos locales (anticheat-copiar) - referencia tecnica
+
+| Ejemplo local | Tipo | Observacion |
+|---|---|---|
+| TigoAntiCheat-master | OSS | ejemplo desactualizado; requiere auditoria manual |
+| rw-anticheat-main | OSS | ejemplo local; requiere auditoria manual |
+| FiveM-AntiCheat-main | OSS | RIESGO: en la copia local se detecto ejecucion dinamica (patron loader/exec) |
+| pac-antimagicbullet | OSS | modulo enfocado a magic bullet (no suite) |
+| AntiMagicBullet | OSS | modulo enfocado a magic bullet (no suite) |
+| midnight | ? | depende del repo; revisar por patrones peligrosos antes de usar |
+| WaveShield (copia local) | ? | revisar integridad; hay multiples forks/copies en la wild |
+| screenshot-basic | OSS | evidence/screenshot (no es anticheat completo) |
+
+Fuentes publicas (referencias):
+- FiveGuard Safe Events (manual/auto): https://docs.fiveguard.net/safe-events/manual-safe-events y https://docs.fiveguard.net/safe-events/auto-safe-events
+- FiniAC docs: https://docs.fini.ac/ (y pagina principal: https://fini.ac/)
+- WaveShield docs: https://docs.waveshield.xyz/ (y repo: https://github.com/AYZNN/WaveShield)
+- SpaceShield: https://spaceshield.one/
+- VanillaAC: https://vanilla-ac.com/
+- Valor Shield: https://valorshield.net/
+- FiveM Secure: https://fivemsecure.com/
+- MegaAC: https://megaac.store/
+- TrueWard: https://trueward.eu/
+
 ## 1) Alcance real de LyxGuard
 LyxGuard se enfoca en lo que mas dano real produce en servidores:
 - spoof de eventos admin (txAdmin/paneles/recursos sensibles)
@@ -85,6 +137,6 @@ Para competir con anticheats fuertes:
 LyxGuard esta construido alrededor de esos principios.
 
 ## 6) Referencias (lectura opcional)
-- FiveGuard (safe events): https://docs.fiveguard.net/guides/safe-events
+- FiveGuard (safe events): https://docs.fiveguard.net/safe-events/manual-safe-events
 - Tokenizacion open source (idea similar): https://github.com/BrunoTheDev/salty_tokenizer
 
