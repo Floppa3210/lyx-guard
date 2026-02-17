@@ -4,19 +4,6 @@ Este documento compara el enfoque de LyxGuard con:
 - anticheats open source 
 - anticheats de pago conocidos (referencia: FiveGuard y similares)
 
-## 0) Matriz comparativa (10 anticheats vs LyxGuard)
-
-Notas importantes:
-- Esta tabla mezcla (a) info publica/documentada y (b) observaciones de ejemplos locales.
-- En anticheats de pago, el feature-set real puede variar por plan/version: valida en sus docs oficiales.
-- En anticheats open source "de internet", hay forks infectados/obsoletos: no copiar loaders ni exec remoto.
-
-Leyenda:
-- `SI`: existe/documentado claramente
-- `PARCIAL`: existe, pero depende de implementacion/plan/integ
-- `?`: no confirmado
-- `RIESGO`: en ejemplos locales detectamos patrones peligrosos (HTTP+exec, ofuscacion, etc)
-
 ## 1) Alcance real de LyxGuard
 LyxGuard se enfoca en lo que mas dano real produce en servidores:
 - spoof de eventos admin (txAdmin/paneles/recursos sensibles)
