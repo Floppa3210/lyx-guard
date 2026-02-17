@@ -29,25 +29,11 @@ LyxGuard prioriza server-side:
 
 El cliente se usa solo como senal auxiliar.
 
-## 3) Lo que vimos en ejemplos locales (anticheat-copiar)
+## 3) Lo que vi en otro anticheats 
 En anticheats de internet se repiten patrones peligrosos:
 - loaders por HTTP + `load/loadstring` (backdoors clasicos)
 - ofuscacion extrema sin razon
 - dominios raros y ejecucion remota
-
-Observacion basada en nuestro scan local (carpetas de ejemplos):
-- se detectaron multiples patrones HIGH de "HTTP fetch + ejecucion dinamica"
-- tambien aparecieron muchos indicadores MED/LOW de ofuscacion y telemetria dudosa
-
-Numeros (scan local):
-- archivos marcados: 147
-- coincidencias HIGH: 106
-- coincidencias MED: 821
-- coincidencias LOW: 106
-
-Conclusion practica:
-- no conviene reciclar codigo de loaders/HTTP/exec
-- si se rescatan ideas de detecciones, reescribir y validar del lado server (con schema + rate + logs)
 
 LyxGuard evita esas rutas:
 - no ejecuta codigo descargado
