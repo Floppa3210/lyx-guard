@@ -213,6 +213,9 @@ function updateDashboardStats(data) {
     if (data.suspicious !== undefined) {
         document.getElementById('statSuspicious').textContent = data.suspicious;
     }
+    if (data.highRiskPlayers !== undefined) {
+        document.getElementById('statHighRisk').textContent = data.highRiskPlayers;
+    }
 }
 
 function renderRecentActivity(events) {
@@ -259,9 +262,19 @@ function formatEventText(e) {
             return `Warning: ${e.player_name || e.player} - ${e.reason}`;
         case 'unban':
             return `Desbaneado: ${e.player_name || e.player}`;
+        case 'suspicious':
+            return `${e.player_name || e.player} - score ${e.score || 0} (${e.level || 'low'}) ${e.lastSignal ? '- ' + e.lastSignal : ''}`;
         default:
             return e.message || e.player_name || 'Evento';
     }
+}
+
+function getRiskBadgeClass(level) {
+    const safeLevel = String(level || 'low').toLowerCase();
+    if (safeLevel === 'critical' || safeLevel === 'severe') return 'badge-danger';
+    if (safeLevel === 'high' || safeLevel === 'elevated') return 'badge-warning';
+    if (safeLevel === 'observed') return 'badge-info';
+    return 'badge-success';
 }
 
 // -------------------------------------------------------------------------------
@@ -295,13 +308,13 @@ function renderDetectionsTable(detections) {
             <td>${esc(d.details ? (typeof d.details === 'string' ? d.details : JSON.stringify(d.details).substring(0, 50)) : '-')}</td>
             <td><span class="badge badge-${getPunishmentBadge(d.punishment)}">${esc(d.punishment)}</span></td>
             <td>
-                <button class="btn btn-sm btn-danger" onclick="banFromDetection('${escapeAttr(d.identifier)}', '${escapeAttr(d.player_name)}')">
+                <button class="btn btn-sm btn-danger" data-action="banFromDetection" data-identifier="${escapeAttr(d.identifier)}" data-player-name="${escapeAttr(d.player_name)}">
                     <i class="fas fa-ban"></i>
                 </button>
-                <button class="btn btn-sm btn-primary" onclick="viewPlayerDetails('${escapeAttr(d.identifier)}')">
+                <button class="btn btn-sm btn-primary" data-action="viewPlayerDetails" data-identifier="${escapeAttr(d.identifier)}">
                     <i class="fas fa-eye"></i>
                 </button>
-                <button class="btn btn-sm btn-warning" onclick="deleteDetection(${d.id})" title="Borrar detección">
+                <button class="btn btn-sm btn-warning" data-action="deleteDetection" data-detection-id="${Number(d.id) || 0}" title="Borrar detección">
                     <i class="fas fa-trash"></i>
                 </button>
             </td>
@@ -359,8 +372,8 @@ function renderBansTable(bans) {
                 <td>${isPermanent ? '<span class="badge badge-danger">Permanente</span>' : formatDate(b.unban_date)}</td>
                 <td><span class="badge badge-${isActive ? 'danger' : 'success'}">${isActive ? 'Activo' : 'Expirado'}</span></td>
                 <td>
-                    ${isActive ? `<button class="btn btn-sm btn-success" onclick="unbanPlayer(${b.id})"><i class="fas fa-unlock"></i></button>` : ''}
-                    <button class="btn btn-sm btn-primary" onclick="viewPlayerDetails('${escapeAttr(b.identifier)}')"><i class="fas fa-eye"></i></button>
+                    ${isActive ? `<button class="btn btn-sm btn-success" data-action="unbanPlayer" data-ban-id="${Number(b.id) || 0}"><i class="fas fa-unlock"></i></button>` : ''}
+                    <button class="btn btn-sm btn-primary" data-action="viewPlayerDetails" data-identifier="${escapeAttr(b.identifier)}"><i class="fas fa-eye"></i></button>
                 </td>
             </tr>
         `;
@@ -393,7 +406,7 @@ function renderWarningsTable(warnings) {
             <td>${esc(w.warned_by || 'Sistema')}</td>
             <td>${w.expires_at ? formatDate(w.expires_at) : '<span class="badge badge-info">Sin expiración</span>'}</td>
             <td>
-                <button class="btn btn-sm btn-danger" onclick="removeWarning(${w.id})"><i class="fas fa-trash"></i></button>
+                <button class="btn btn-sm btn-danger" data-action="removeWarning" data-warning-id="${Number(w.id) || 0}"><i class="fas fa-trash"></i></button>
             </td>
         </tr>
     `).join('');
@@ -432,12 +445,15 @@ function renderSuspiciousGrid(players) {
             <div class="player-stats">
                 <span class="stat"><i class="fas fa-exclamation-triangle"></i> ${p.detection_count || 0} detecciones</span>
                 <span class="stat"><i class="fas fa-exclamation-circle"></i> ${p.warning_count || 0} warnings</span>
+                <span class="stat"><i class="fas fa-chart-line"></i> score ${p.risk_score || 0}</span>
+                <span class="badge ${getRiskBadgeClass(p.risk_level)}">${esc(p.risk_level || 'low')}</span>
             </div>
+            ${p.last_signal ? `<div class="player-stats"><span class="stat"><i class="fas fa-wave-square"></i> ${esc(p.last_signal)}</span></div>` : ''}
             <div style="display:flex;gap:10px;">
-                <button class="btn btn-sm btn-danger" onclick="banFromSuspicious('${escapeAttr(p.identifier)}', '${escapeAttr(p.player_name)}')">
+                <button class="btn btn-sm btn-danger" data-action="banFromSuspicious" data-identifier="${escapeAttr(p.identifier)}" data-player-name="${escapeAttr(p.player_name)}">
                     <i class="fas fa-ban"></i> Banear
                 </button>
-                <button class="btn btn-sm btn-primary" onclick="viewPlayerDetails('${escapeAttr(p.identifier)}')">
+                <button class="btn btn-sm btn-primary" data-action="viewPlayerDetails" data-identifier="${escapeAttr(p.identifier)}">
                     <i class="fas fa-eye"></i> Detalles
                 </button>
             </div>
@@ -567,6 +583,8 @@ function showPlayerModal(player) {
             <div class="detail-item"><label>Steam:</label><span>${esc(player.steam || 'N/A')}</span></div>
             <div class="detail-item"><label>Discord:</label><span>${esc(player.discord || 'N/A')}</span></div>
             <div class="detail-item"><label>License:</label><span>${esc(player.license || 'N/A')}</span></div>
+            <div class="detail-item"><label>Risk Score:</label><span>${player.riskScore || 0}</span></div>
+            <div class="detail-item"><label>Nivel:</label><span class="badge ${getRiskBadgeClass(player.riskLevel)}">${esc(player.riskLevel || 'low')}</span></div>
         </div>
         <hr style="margin:20px 0;border-color:var(--border-color);">
         <h4>Estadísticas</h4>
@@ -584,11 +602,12 @@ function showPlayerModal(player) {
                 <div style="color:var(--text-muted);font-size:0.85rem;">Bans</div>
             </div>
         </div>
+        ${player.lastRiskSignal ? `<div style="margin-top:15px;color:var(--text-muted);">Última señal: ${esc(player.lastRiskSignal)}</div>` : ''}
         <div style="margin-top:20px;display:flex;gap:10px;">
-            <button class="btn btn-danger" onclick="banFromModal('${player.identifier}', '${esc(player.name)}')">
+            <button class="btn btn-danger" data-action="banFromModal" data-identifier="${escapeAttr(player.identifier)}" data-player-name="${escapeAttr(player.name)}">
                 <i class="fas fa-ban"></i> Banear
             </button>
-            <button class="btn btn-primary" onclick="closePlayerModal()">Cerrar</button>
+            <button class="btn btn-primary" data-action="closePlayerModal">Cerrar</button>
         </div>
     `;
 
@@ -832,12 +851,15 @@ function playAlertSound() {
 // -------------------------------------------------------------------------------
 
 // Tab switching
-function switchConfigTab(tabName) {
+function switchConfigTab(tabName, buttonEl) {
     // Update tab buttons
     document.querySelectorAll('.config-tab').forEach(tab => {
         tab.classList.remove('active');
     });
-    event.currentTarget.classList.add('active');
+    const activeButton = buttonEl || document.querySelector(`.config-tab[data-tab="${tabName}"]`);
+    if (activeButton) {
+        activeButton.classList.add('active');
+    }
 
     // Update content
     document.querySelectorAll('.config-tab-content').forEach(content => {
@@ -878,7 +900,7 @@ function renderWhitelistList(whitelist) {
                 <span class="whitelist-identifier">${esc(w.identifier)}</span>
             </div>
             <span class="whitelist-level ${w.level || 'full'}">${getLevelLabel(w.level)}</span>
-            <button class="btn btn-sm btn-danger" onclick="removeFromWhitelist('${escapeAttr(w.identifier)}')" title="Eliminar">
+            <button class="btn btn-sm btn-danger" data-action="removeFromWhitelist" data-identifier="${escapeAttr(w.identifier)}" title="Eliminar">
                 <i class="fas fa-trash"></i>
             </button>
         </div>
@@ -1068,17 +1090,6 @@ function resetDetectionDefaults() {
     }, { icon: 'undo', buttonType: 'warning', buttonText: 'Restaurar', buttonIcon: 'undo' });
 }
 
-// Update navigation to include adminconfig page
-document.addEventListener('DOMContentLoaded', function() {
-    // Re-attach click handlers for nav items including new adminconfig
-    document.querySelectorAll('.nav-item').forEach(item => {
-        item.addEventListener('click', function() {
-            const page = this.dataset.page;
-            navigateTo(page);
-        });
-    });
-});
-
 // Extend navigateTo function for adminconfig
 const originalNavigateTo = navigateTo;
 navigateTo = function(page) {
@@ -1105,3 +1116,64 @@ navigateTo = function(page) {
         case 'adminconfig': loadAdminConfig(); break;
     }
 };
+
+const UiActionHandlers = {
+    closePanel: () => closePanel(),
+    refreshData: () => refreshData(),
+    loadDetections: () => loadDetections(),
+    loadBans: () => loadBans(),
+    loadWarnings: () => loadWarnings(),
+    loadSuspicious: () => loadSuspicious(),
+    loadAdminConfig: () => loadAdminConfig(),
+    switchConfigTab: (el) => switchConfigTab(el.dataset.tab, el),
+    addToWhitelist: () => addToWhitelist(),
+    saveImmuneGroups: () => saveImmuneGroups(),
+    saveVipSettings: () => saveVipSettings(),
+    saveDetectionSettings: () => saveDetectionSettings(),
+    resetDetectionDefaults: () => resetDetectionDefaults(),
+    saveWebhooks: () => saveWebhooks(),
+    clearPlayerLogs: () => clearPlayerLogs(),
+    clearOldLogs: () => clearOldLogs(),
+    clearAllLogsConfirm: () => clearAllLogsConfirm(),
+    closePlayerModal: () => closePlayerModal(),
+    closeConfirmModal: () => closeConfirmModal(),
+    executeConfirmAction: () => executeConfirmAction(),
+    closeInputModal: () => closeInputModal(),
+    executeInputAction: () => executeInputAction(),
+    banFromDetection: (el) => banFromDetection(el.dataset.identifier || '', el.dataset.playerName || ''),
+    viewPlayerDetails: (el) => viewPlayerDetails(el.dataset.identifier || ''),
+    deleteDetection: (el) => deleteDetection(Number(el.dataset.detectionId) || 0),
+    unbanPlayer: (el) => unbanPlayer(Number(el.dataset.banId) || 0),
+    removeWarning: (el) => removeWarning(Number(el.dataset.warningId) || 0),
+    banFromSuspicious: (el) => banFromSuspicious(el.dataset.identifier || '', el.dataset.playerName || ''),
+    banFromModal: (el) => banFromModal(el.dataset.identifier || '', el.dataset.playerName || ''),
+    removeFromWhitelist: (el) => removeFromWhitelist(el.dataset.identifier || '')
+};
+
+const UiChangeHandlers = {
+    filterDetections: () => filterDetections(),
+    updateImmuneGroups: () => updateImmuneGroups()
+};
+
+document.addEventListener('click', function(e) {
+    const actionEl = e.target.closest('[data-action]');
+    if (!actionEl) return;
+
+    const action = actionEl.dataset.action;
+    const handler = UiActionHandlers[action];
+    if (typeof handler !== 'function') return;
+
+    e.preventDefault();
+    handler(actionEl, e);
+});
+
+document.addEventListener('change', function(e) {
+    const changeEl = e.target.closest('[data-change]');
+    if (!changeEl) return;
+
+    const action = changeEl.dataset.change;
+    const handler = UiChangeHandlers[action];
+    if (typeof handler !== 'function') return;
+
+    handler(changeEl, e);
+});

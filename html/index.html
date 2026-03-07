@@ -39,7 +39,7 @@
                     <span class="pulse"></span>
                     <span>Activo</span>
                 </div>
-                <button class="btn-close" onclick="closePanel()"><i class="fas fa-times"></i></button>
+                <button class="btn-close" data-action="closePanel"><i class="fas fa-times"></i></button>
             </div>
         </aside>
 
@@ -49,7 +49,7 @@
             <section id="page-dashboard" class="page active">
                 <div class="page-header">
                     <h1><i class="fas fa-home"></i> Dashboard</h1>
-                    <button class="btn btn-primary" onclick="refreshData()"><i class="fas fa-sync-alt"></i>
+                    <button class="btn btn-primary" data-action="refreshData"><i class="fas fa-sync-alt"></i>
                         Actualizar</button>
                 </div>
 
@@ -91,6 +91,13 @@
                         </div>
                     </div>
                     <div class="stat-card">
+                        <div class="stat-icon gradient-red"><i class="fas fa-triangle-exclamation"></i></div>
+                        <div class="stat-info">
+                            <span class="stat-value" id="statHighRisk">0</span>
+                            <span class="stat-label">Riesgo Alto</span>
+                        </div>
+                    </div>
+                    <div class="stat-card">
                         <div class="stat-icon gradient-green"><i class="fas fa-shield-alt"></i></div>
                         <div class="stat-info">
                             <span class="stat-value" id="statProtected">OK</span>
@@ -129,7 +136,7 @@
                 <div class="page-header">
                     <h1><i class="fas fa-exclamation-triangle"></i> Detecciones</h1>
                     <div class="header-actions">
-                        <select id="detectionFilter" class="select-styled" onchange="filterDetections()">
+                        <select id="detectionFilter" class="select-styled" data-change="filterDetections">
                             <option value="all">Todas</option>
                             <option value="teleport">Teleport</option>
                             <option value="noclip">Noclip</option>
@@ -138,7 +145,7 @@
                             <option value="weapon">Armas</option>
                             <option value="vehicle">Vehículos</option>
                         </select>
-                        <button class="btn btn-primary" onclick="loadDetections()"><i
+                        <button class="btn btn-primary" data-action="loadDetections"><i
                                 class="fas fa-sync-alt"></i></button>
                     </div>
                 </div>
@@ -169,7 +176,7 @@
                             <option value="expired">Expirados</option>
                             <option value="all">Todos</option>
                         </select>
-                        <button class="btn btn-primary" onclick="loadBans()"><i class="fas fa-sync-alt"></i></button>
+                        <button class="btn btn-primary" data-action="loadBans"><i class="fas fa-sync-alt"></i></button>
                     </div>
                 </div>
                 <div class="table-container">
@@ -193,7 +200,7 @@
             <section id="page-warnings" class="page">
                 <div class="page-header">
                     <h1><i class="fas fa-exclamation-circle"></i> Warnings</h1>
-                    <button class="btn btn-primary" onclick="loadWarnings()"><i class="fas fa-sync-alt"></i></button>
+                    <button class="btn btn-primary" data-action="loadWarnings"><i class="fas fa-sync-alt"></i></button>
                 </div>
                 <div class="table-container">
                     <table class="data-table">
@@ -216,7 +223,7 @@
             <section id="page-suspicious" class="page">
                 <div class="page-header">
                     <h1><i class="fas fa-user-secret"></i> Jugadores Sospechosos</h1>
-                    <button class="btn btn-primary" onclick="loadSuspicious()"><i class="fas fa-sync-alt"></i></button>
+                    <button class="btn btn-primary" data-action="loadSuspicious"><i class="fas fa-sync-alt"></i></button>
                 </div>
                 <div class="suspicious-grid" id="suspiciousGrid">
                     <!-- Player cards rendered here -->
@@ -245,17 +252,17 @@
             <section id="page-adminconfig" class="page">
                 <div class="page-header">
                     <h1><i class="fas fa-user-shield"></i> Configuración de Admin</h1>
-                    <button class="btn btn-primary" onclick="loadAdminConfig()" title="Actualizar"><i class="fas fa-sync-alt"></i> Actualizar</button>
+                    <button class="btn btn-primary" data-action="loadAdminConfig" title="Actualizar"><i class="fas fa-sync-alt"></i> Actualizar</button>
                 </div>
 
                 <div class="admin-config-tabs">
-                    <button class="config-tab active" onclick="switchConfigTab('whitelist')">
+                    <button class="config-tab active" data-action="switchConfigTab" data-tab="whitelist">
                         <i class="fas fa-user-check"></i> Whitelist
                     </button>
-                    <button class="config-tab" onclick="switchConfigTab('permissions')">
+                    <button class="config-tab" data-action="switchConfigTab" data-tab="permissions">
                         <i class="fas fa-key"></i> Permisos
                     </button>
-                    <button class="config-tab" onclick="switchConfigTab('detections')">
+                    <button class="config-tab" data-action="switchConfigTab" data-tab="detections">
                         <i class="fas fa-shield-alt"></i> Detecciones
                     </button>
                 </div>
@@ -286,7 +293,7 @@
                                 <label>Notas</label>
                                 <textarea id="whitelistNotes" placeholder="Notas opcionales..." class="input-full" rows="2" title="Notas sobre el jugador"></textarea>
                             </div>
-                            <button class="btn btn-success btn-full" onclick="addToWhitelist()">
+                            <button class="btn btn-success btn-full" data-action="addToWhitelist">
                                 <i class="fas fa-plus"></i> Añadir a Whitelist
                             </button>
                         </div>
@@ -305,27 +312,27 @@
                             <p class="setting-description">Grupos de ESX con inmunidad total al anticheat</p>
                             <div class="checkbox-grid" id="immuneGroupsGrid">
                                 <label class="checkbox-item">
-                                    <input type="checkbox" id="group_superadmin" onchange="updateImmuneGroups()">
+                                    <input type="checkbox" id="group_superadmin" data-change="updateImmuneGroups">
                                     <span>superadmin</span>
                                 </label>
                                 <label class="checkbox-item">
-                                    <input type="checkbox" id="group_admin" onchange="updateImmuneGroups()">
+                                    <input type="checkbox" id="group_admin" data-change="updateImmuneGroups">
                                     <span>admin</span>
                                 </label>
                                 <label class="checkbox-item">
-                                    <input type="checkbox" id="group_mod" onchange="updateImmuneGroups()">
+                                    <input type="checkbox" id="group_mod" data-change="updateImmuneGroups">
                                     <span>mod</span>
                                 </label>
                                 <label class="checkbox-item">
-                                    <input type="checkbox" id="group_owner" onchange="updateImmuneGroups()">
+                                    <input type="checkbox" id="group_owner" data-change="updateImmuneGroups">
                                     <span>owner</span>
                                 </label>
                                 <label class="checkbox-item">
-                                    <input type="checkbox" id="group_helper" onchange="updateImmuneGroups()">
+                                    <input type="checkbox" id="group_helper" data-change="updateImmuneGroups">
                                     <span>helper</span>
                                 </label>
                             </div>
-                            <button class="btn btn-primary btn-full" onclick="saveImmuneGroups()">
+                            <button class="btn btn-primary btn-full" data-action="saveImmuneGroups">
                                 <i class="fas fa-save"></i> Guardar Grupos
                             </button>
                         </div>
@@ -395,7 +402,7 @@
                                     <input type="checkbox"> explosion
                                 </label>
                             </div>
-                            <button class="btn btn-primary btn-full" onclick="saveVipSettings()">
+                            <button class="btn btn-primary btn-full" data-action="saveVipSettings">
                                 <i class="fas fa-save"></i> Guardar Config VIP
                             </button>
                         </div>
@@ -629,10 +636,10 @@
                     </div>
 
                     <div class="detection-actions">
-                        <button class="btn btn-success" onclick="saveDetectionSettings()">
+                        <button class="btn btn-success" data-action="saveDetectionSettings">
                             <i class="fas fa-save"></i> Guardar Configuración de Detecciones
                         </button>
-                        <button class="btn btn-warning" onclick="resetDetectionDefaults()">
+                        <button class="btn btn-warning" data-action="resetDetectionDefaults">
                             <i class="fas fa-undo"></i> Restaurar Valores por Defecto
                         </button>
                     </div>
@@ -667,7 +674,7 @@
                             <input type="text" id="webhookAlerts" placeholder="https://discord.com/api/webhooks/..."
                                 class="input-full">
                         </div>
-                        <button class="btn btn-primary btn-full" onclick="saveWebhooks()">Guardar Webhooks</button>
+                        <button class="btn btn-primary btn-full" data-action="saveWebhooks">Guardar Webhooks</button>
                     </div>
 
                     <div class="settings-card">
@@ -700,7 +707,7 @@
                             <div class="input-group">
                                 <input type="text" id="clearPlayerIdentifier" placeholder="license:xxxxx o steam:xxxxx"
                                     class="input-full">
-                                <button class="btn btn-warning" onclick="clearPlayerLogs()">
+                                <button class="btn btn-warning" data-action="clearPlayerLogs">
                                     <i class="fas fa-user-times"></i> Limpiar
                                 </button>
                             </div>
@@ -716,7 +723,7 @@
                                     <option value="60">Más de 60 días</option>
                                     <option value="90">Más de 90 días</option>
                                 </select>
-                                <button class="btn btn-warning" onclick="clearOldLogs()">
+                                <button class="btn btn-warning" data-action="clearOldLogs">
                                     <i class="fas fa-calendar-times"></i> Limpiar
                                 </button>
                             </div>
@@ -728,7 +735,7 @@
                             <label><i class="fas fa-exclamation-triangle"></i> Zona de Peligro</label>
                         </div>
 
-                        <button class="btn btn-danger btn-full" onclick="clearAllLogsConfirm()">
+                        <button class="btn btn-danger btn-full" data-action="clearAllLogsConfirm">
                             <i class="fas fa-skull-crossbones"></i> Limpiar TODOS los Logs
                         </button>
                     </div>
@@ -742,7 +749,7 @@
         <div class="modal-content">
             <div class="modal-header">
                 <h2 id="playerModalTitle">Detalles del Jugador</h2>
-                <button class="modal-close" onclick="closePlayerModal()"><i class="fas fa-times"></i></button>
+                <button class="modal-close" data-action="closePlayerModal"><i class="fas fa-times"></i></button>
             </div>
             <div class="modal-body" id="playerModalBody"></div>
         </div>
@@ -753,7 +760,7 @@
         <div class="modal-content modal-sm">
             <div class="modal-header modal-header-warning">
                 <h2 id="confirmModalTitle"><i class="fas fa-exclamation-triangle"></i> Confirmar Acción</h2>
-                <button class="modal-close" onclick="closeConfirmModal()"><i class="fas fa-times"></i></button>
+                <button class="modal-close" data-action="closeConfirmModal"><i class="fas fa-times"></i></button>
             </div>
             <div class="modal-body">
                 <p id="confirmModalMessage" class="confirm-message"></p>
@@ -763,9 +770,9 @@
                 </div>
             </div>
             <div class="modal-footer">
-                <button class="btn btn-secondary" onclick="closeConfirmModal()"><i class="fas fa-times"></i>
+                <button class="btn btn-secondary" data-action="closeConfirmModal"><i class="fas fa-times"></i>
                     Cancelar</button>
-                <button class="btn btn-danger" id="confirmModalBtn" onclick="executeConfirmAction()"><i
+                <button class="btn btn-danger" id="confirmModalBtn" data-action="executeConfirmAction"><i
                         class="fas fa-check"></i> Confirmar</button>
             </div>
         </div>
@@ -776,16 +783,16 @@
         <div class="modal-content modal-sm">
             <div class="modal-header">
                 <h2 id="inputModalTitle"><i class="fas fa-edit"></i> Ingresa información</h2>
-                <button class="modal-close" onclick="closeInputModal()"><i class="fas fa-times"></i></button>
+                <button class="modal-close" data-action="closeInputModal"><i class="fas fa-times"></i></button>
             </div>
             <div class="modal-body">
                 <p id="inputModalMessage" class="input-message"></p>
                 <input type="text" id="inputModalField" class="input-full" placeholder="">
             </div>
             <div class="modal-footer">
-                <button class="btn btn-secondary" onclick="closeInputModal()"><i class="fas fa-times"></i>
+                <button class="btn btn-secondary" data-action="closeInputModal"><i class="fas fa-times"></i>
                     Cancelar</button>
-                <button class="btn btn-primary" onclick="executeInputAction()"><i class="fas fa-check"></i>
+                <button class="btn btn-primary" data-action="executeInputAction"><i class="fas fa-check"></i>
                     Aceptar</button>
             </div>
         </div>

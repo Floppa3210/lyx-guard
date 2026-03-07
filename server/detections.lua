@@ -15,6 +15,8 @@ local _RiskScores = {}        -- [identifier] = { score, lastDecay, lastAction }
 local _ServerAnomalySnapshots = {}
 local _ServerAnomalyCooldowns = {}
 local _BurstSignals = {}      -- [identifier] = { windowStartMs, total, byReason, lastEscalationMs }
+local _RiskPersistenceState = { loaded = false, dirty = {}, flushThreadStarted = false }
+local GetIdentifier
 
 local function _PushExLog(entry)
     if type(LyxGuardPushExhaustiveLog) == 'function' then
@@ -66,7 +68,19 @@ end
 -- Export for use by lyx-panel and other scripts
 exports('SetPlayerSafe', SetPlayerSafe)
 exports('IsPlayerSafe', IsPlayerSafe)
-exports('GetRiskScore', function(sourceOrIdentifier)
+
+-- Helper function to get player identifier
+GetIdentifier = function(source, idType)
+    idType = idType or 'license'
+    for _, id in ipairs(GetPlayerIdentifiers(source)) do
+        if string.find(id, idType .. ':') then
+            return id
+        end
+    end
+    return 'unknown'
+end
+
+local function _ResolveRiskIdentifier(sourceOrIdentifier)
     local identifier = nil
     if type(sourceOrIdentifier) == 'number' then
         if sourceOrIdentifier > 0 and GetPlayerName(sourceOrIdentifier) then
@@ -77,20 +91,491 @@ exports('GetRiskScore', function(sourceOrIdentifier)
     end
 
     if not identifier or identifier == '' or identifier == 'unknown' then
-        return { identifier = identifier or 'unknown', score = 0 }
+        return nil
+    end
+    return identifier
+end
+
+local function _GetRiskConfig()
+    return (Config and Config.Risk) or {}
+end
+
+local function _GetRiskPersistenceConfig(riskCfg)
+    local persistence = (riskCfg and riskCfg.persistence) or {}
+    return {
+        enabled = persistence.enabled == true,
+        flushIntervalMs = math.max(math.floor(tonumber(persistence.flushIntervalMs) or 30000), 5000),
+        loadLimit = math.max(math.floor(tonumber(persistence.loadLimit) or 2000), 50),
+        recentSignalsLimit = math.max(math.floor(tonumber(persistence.recentSignalsLimit) or 5), 3),
+        minScoreToPersist = math.max(tonumber(persistence.minScoreToPersist) or 1, 0),
+        pruneOlderThanDays = math.max(math.floor(tonumber(persistence.pruneOlderThanDays) or 30), 0)
+    }
+end
+
+local function _NowRiskMs()
+    return os.time() * 1000
+end
+
+local function _NormalizeRiskTimestamp(value, fallbackMs)
+    local fallback = math.floor(tonumber(fallbackMs) or _NowRiskMs())
+    local n = math.floor(tonumber(value) or 0)
+    if n <= 0 then
+        return fallback
+    end
+    if n < 946684800000 then
+        return fallback
+    end
+    return n
+end
+
+local function _NormalizeRiskOptionalTimestamp(value)
+    local n = math.floor(tonumber(value) or 0)
+    if n <= 0 or n < 946684800000 then
+        return 0
+    end
+    return n
+end
+
+local function _CanAwaitRiskQuery()
+    return MySQL and MySQL.query and MySQL.query.await
+end
+
+local function _AwaitRiskQuery(query, params)
+    if not _CanAwaitRiskQuery() then
+        return nil
+    end
+    return MySQL.query.await(query, params or {})
+end
+
+local function _DecodeRiskJson(payload)
+    if type(payload) == 'table' then
+        return payload
+    end
+    if type(payload) ~= 'string' or payload == '' then
+        return {}
+    end
+    local ok, decoded = pcall(function()
+        return json.decode(payload)
+    end)
+    if ok and type(decoded) == 'table' then
+        return decoded
+    end
+    return {}
+end
+
+local function _GetSuspiciousFlagCount(suspicious)
+    if type(suspicious) ~= 'table' then
+        return 0
+    end
+    local count = math.max(math.floor(tonumber(suspicious.flagCount) or 0), 0)
+    local liveFlags = type(suspicious.flags) == 'table' and #suspicious.flags or 0
+    return math.max(count, liveFlags)
+end
+
+local function _ExtractRecentSignals(suspicious, limit)
+    local recentSignals = {}
+    if type(suspicious) ~= 'table' or type(suspicious.flags) ~= 'table' then
+        return recentSignals
     end
 
-    local r = _RiskScores[identifier]
-    if not r then
-        return { identifier = identifier, score = 0 }
+    local maxSignals = math.max(math.floor(tonumber(limit) or 3), 1)
+    local startIndex = math.max(#suspicious.flags - maxSignals + 1, 1)
+    for i = startIndex, #suspicious.flags do
+        local flag = suspicious.flags[i]
+        recentSignals[#recentSignals + 1] = {
+            reason = tostring(flag.reason or 'unknown'),
+            time = tonumber(flag.time) or os.time()
+        }
+    end
+    return recentSignals
+end
+
+local function _NormalizeRiskRecord(record, nowMs)
+    if type(record) ~= 'table' then
+        return nil, false
     end
 
+    local changed = false
+    local score = tonumber(record.score) or 0
+    if record.score ~= score then changed = true end
+    record.score = score
+
+    local lastDecay = _NormalizeRiskTimestamp(record.lastDecay, nowMs)
+    if tonumber(record.lastDecay) ~= lastDecay then changed = true end
+    record.lastDecay = lastDecay
+
+    local lastAction = _NormalizeRiskOptionalTimestamp(record.lastAction)
+    if tonumber(record.lastAction) ~= lastAction then changed = true end
+    record.lastAction = lastAction
+
+    local lastAlert = _NormalizeRiskOptionalTimestamp(record.lastAlert)
+    if tonumber(record.lastAlert) ~= lastAlert then changed = true end
+    record.lastAlert = lastAlert
+
+    local lastUpdate = _NormalizeRiskOptionalTimestamp(record.lastUpdate)
+    if lastUpdate <= 0 then
+        lastUpdate = lastDecay
+    end
+    if tonumber(record.lastUpdate) ~= lastUpdate then changed = true end
+    record.lastUpdate = lastUpdate
+
+    if record.lastReason ~= nil then
+        record.lastReason = tostring(record.lastReason)
+    end
+
+    if record.playerName ~= nil and record.playerName ~= '' then
+        record.playerName = tostring(record.playerName)
+    end
+
+    return record, changed
+end
+
+local function _GetRiskThresholds(riskCfg)
+    local thr = (riskCfg and riskCfg.thresholds) or {}
+    return {
+        notify = tonumber(thr.notify) or 20,
+        staffAlert = tonumber(thr.staffAlert) or 60,
+        kick = tonumber(thr.kick) or 80,
+        tempBan = tonumber(thr.tempBan) or 140,
+        permBan = tonumber(thr.permBan) or 220
+    }
+end
+
+local function _ApplyRiskDecay(record, nowMs, riskCfg)
+    if type(record) ~= 'table' then
+        return nil, false
+    end
+    local changed = false
+    local decayMs = tonumber(riskCfg and riskCfg.decayMs) or (5 * 60 * 1000)
+    local decayPoints = tonumber(riskCfg and riskCfg.decayPoints) or 15
+    local _, normalized = _NormalizeRiskRecord(record, nowMs)
+    changed = normalized == true
+    if decayMs > 0 and decayPoints > 0 then
+        local elapsed = nowMs - record.lastDecay
+        if elapsed >= decayMs then
+            local steps = math.floor(elapsed / decayMs)
+            record.score = math.max(0, record.score - (steps * decayPoints))
+            record.lastDecay = nowMs
+            changed = true
+        end
+    end
+    return record, changed
+end
+
+local function _MarkRiskDirty(sourceOrIdentifier)
+    local identifier = _ResolveRiskIdentifier(sourceOrIdentifier)
+    if not identifier then
+        return
+    end
+
+    local persistenceCfg = _GetRiskPersistenceConfig(_GetRiskConfig())
+    if persistenceCfg.enabled ~= true then
+        return
+    end
+
+    _RiskPersistenceState.dirty[identifier] = true
+end
+
+local function _GetRiskLevel(score, riskCfg)
+    local value = tonumber(score) or 0
+    local thr = _GetRiskThresholds(riskCfg)
+    if value >= thr.permBan then return 'critical' end
+    if value >= thr.tempBan then return 'severe' end
+    if value >= thr.kick then return 'high' end
+    if value >= thr.staffAlert then return 'elevated' end
+    if value >= thr.notify then return 'observed' end
+    return 'low'
+end
+
+local function _BuildRiskProfile(identifier, record, riskCfg)
+    local nowMs = _NowRiskMs()
+    local state, decayChanged = _ApplyRiskDecay(record or { score = 0, lastDecay = nowMs, lastAction = 0 }, nowMs, riskCfg or _GetRiskConfig())
+    local suspicious = SuspiciousPlayers[identifier]
+    if identifier and decayChanged then
+        _MarkRiskDirty(identifier)
+    end
+    local recentSignals = _ExtractRecentSignals(suspicious, 3)
     return {
         identifier = identifier,
-        score = tonumber(r.score) or 0,
-        lastDecay = r.lastDecay,
-        lastAction = r.lastAction
+        score = tonumber(state.score) or 0,
+        lastDecay = tonumber(state.lastDecay) or nowMs,
+        lastAction = tonumber(state.lastAction) or 0,
+        lastReason = state.lastReason,
+        lastUpdate = tonumber(state.lastUpdate) or 0,
+        level = _GetRiskLevel(state.score, riskCfg or _GetRiskConfig()),
+        playerName = state.playerName or (suspicious and suspicious.playerName) or nil,
+        flagCount = _GetSuspiciousFlagCount(suspicious),
+        firstFlag = suspicious and suspicious.firstFlag or nil,
+        recentSignals = recentSignals
     }
+end
+
+local function _FlushRiskProfile(identifier, persistenceCfg, riskCfg)
+    identifier = _ResolveRiskIdentifier(identifier)
+    if not identifier then
+        return false
+    end
+
+    persistenceCfg = persistenceCfg or _GetRiskPersistenceConfig(riskCfg or _GetRiskConfig())
+    riskCfg = riskCfg or _GetRiskConfig()
+
+    if persistenceCfg.enabled ~= true or not _CanAwaitRiskQuery() then
+        return false
+    end
+
+    local record = _RiskScores[identifier]
+    local suspicious = SuspiciousPlayers[identifier]
+    if record then
+        local nowMs = _NowRiskMs()
+        _NormalizeRiskRecord(record, nowMs)
+        _ApplyRiskDecay(record, nowMs, riskCfg)
+    end
+
+    local score = tonumber(record and record.score) or 0
+    local flagCount = _GetSuspiciousFlagCount(suspicious)
+    if score < persistenceCfg.minScoreToPersist and flagCount <= 0 then
+        _AwaitRiskQuery('DELETE FROM lyxguard_risk_profiles WHERE identifier = ?', { identifier })
+        _RiskPersistenceState.dirty[identifier] = nil
+        return true
+    end
+
+    local recentSignals = _ExtractRecentSignals(suspicious, persistenceCfg.recentSignalsLimit)
+    local encodedSignals = '[]'
+    local okEncode, encoded = pcall(function()
+        return json.encode(recentSignals)
+    end)
+    if okEncode and type(encoded) == 'string' and encoded ~= '' then
+        encodedSignals = encoded
+    end
+
+    local playerName = record and record.playerName or nil
+    if (not playerName or playerName == '') and suspicious and suspicious.playerName then
+        playerName = suspicious.playerName
+    end
+
+    _AwaitRiskQuery([[
+        INSERT INTO lyxguard_risk_profiles (
+            identifier, player_name, score, last_decay_ms, last_action_ms, last_alert_ms,
+            last_update_ms, last_reason, flag_count, first_flag_ts, recent_signals
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON DUPLICATE KEY UPDATE
+            player_name = VALUES(player_name),
+            score = VALUES(score),
+            last_decay_ms = VALUES(last_decay_ms),
+            last_action_ms = VALUES(last_action_ms),
+            last_alert_ms = VALUES(last_alert_ms),
+            last_update_ms = VALUES(last_update_ms),
+            last_reason = VALUES(last_reason),
+            flag_count = VALUES(flag_count),
+            first_flag_ts = VALUES(first_flag_ts),
+            recent_signals = VALUES(recent_signals)
+    ]], {
+        identifier,
+        playerName,
+        score,
+        tonumber(record and record.lastDecay) or _NowRiskMs(),
+        tonumber(record and record.lastAction) or 0,
+        tonumber(record and record.lastAlert) or 0,
+        tonumber(record and record.lastUpdate) or 0,
+        record and record.lastReason or nil,
+        flagCount,
+        suspicious and tonumber(suspicious.firstFlag) or nil,
+        encodedSignals
+    })
+
+    _RiskPersistenceState.dirty[identifier] = nil
+    return true
+end
+
+local function _LoadPersistedRiskProfiles()
+    local riskCfg = _GetRiskConfig()
+    local persistenceCfg = _GetRiskPersistenceConfig(riskCfg)
+    if persistenceCfg.enabled ~= true or not _CanAwaitRiskQuery() then
+        return false
+    end
+
+    local rows = _AwaitRiskQuery([[
+        SELECT identifier, player_name, score, last_decay_ms, last_action_ms, last_alert_ms,
+               last_update_ms, last_reason, flag_count, first_flag_ts, recent_signals
+        FROM lyxguard_risk_profiles
+        ORDER BY last_update_ms DESC
+        LIMIT ?
+    ]], { persistenceCfg.loadLimit })
+
+    if type(rows) ~= 'table' then
+        return false
+    end
+
+    local loaded = 0
+    for _, row in ipairs(rows) do
+        local identifier = _ResolveRiskIdentifier(row.identifier)
+        if identifier then
+            local nowMs = _NowRiskMs()
+            local record = {
+                score = tonumber(row.score) or 0,
+                lastDecay = row.last_decay_ms,
+                lastAction = row.last_action_ms,
+                lastAlert = row.last_alert_ms,
+                lastUpdate = row.last_update_ms,
+                lastReason = row.last_reason,
+                playerName = row.player_name
+            }
+            _NormalizeRiskRecord(record, nowMs)
+            _RiskScores[identifier] = record
+
+            local decodedSignals = _DecodeRiskJson(row.recent_signals)
+            local flags = {}
+            for _, signal in ipairs(decodedSignals) do
+                if type(signal) == 'table' then
+                    flags[#flags + 1] = {
+                        reason = tostring(signal.reason or 'unknown'),
+                        time = tonumber(signal.time) or os.time()
+                    }
+                end
+            end
+
+            local flagCount = math.max(tonumber(row.flag_count) or 0, #flags)
+            if flagCount > 0 then
+                SuspiciousPlayers[identifier] = {
+                    playerName = row.player_name,
+                    firstFlag = tonumber(row.first_flag_ts) or (flags[1] and tonumber(flags[1].time)) or nil,
+                    flagCount = flagCount,
+                    flags = flags
+                }
+            end
+
+            loaded = loaded + 1
+        end
+    end
+
+    _RiskPersistenceState.loaded = true
+    if LyxGuardLib and LyxGuardLib.Info then
+        LyxGuardLib.Info('[RISK] Loaded %s persisted profiles', tostring(loaded))
+    else
+        print(('[LyxGuard][RISK] Loaded %s persisted profiles'):format(tostring(loaded)))
+    end
+    return true
+end
+
+local function _PrunePersistedRiskProfiles(persistenceCfg)
+    if not persistenceCfg or persistenceCfg.enabled ~= true or not _CanAwaitRiskQuery() then
+        return false
+    end
+
+    local days = tonumber(persistenceCfg.pruneOlderThanDays) or 0
+    if days <= 0 then
+        return false
+    end
+
+    local cutoffMs = _NowRiskMs() - (days * 24 * 60 * 60 * 1000)
+    _AwaitRiskQuery('DELETE FROM lyxguard_risk_profiles WHERE last_update_ms > 0 AND last_update_ms < ?', {
+        cutoffMs
+    })
+    return true
+end
+
+local function GetRiskProfile(sourceOrIdentifier)
+    local identifier = _ResolveRiskIdentifier(sourceOrIdentifier)
+    if not identifier then
+        return { identifier = 'unknown', score = 0, level = 'low', flagCount = 0, recentSignals = {} }
+    end
+    return _BuildRiskProfile(identifier, _RiskScores[identifier], _GetRiskConfig())
+end
+
+local function GetTopRiskProfiles(limit, minScore)
+    local maxRows = math.max(math.floor(tonumber(limit) or 25), 1)
+    local minValue = math.max(tonumber(minScore) or 1, 0)
+    local riskCfg = _GetRiskConfig()
+    local rows = {}
+
+    for identifier, record in pairs(_RiskScores) do
+        local profile = _BuildRiskProfile(identifier, record, riskCfg)
+        if (tonumber(profile.score) or 0) >= minValue then
+            rows[#rows + 1] = profile
+        end
+    end
+
+    table.sort(rows, function(a, b)
+        local scoreA = tonumber(a.score) or 0
+        local scoreB = tonumber(b.score) or 0
+        if scoreA == scoreB then
+            return (tonumber(a.lastUpdate) or 0) > (tonumber(b.lastUpdate) or 0)
+        end
+        return scoreA > scoreB
+    end)
+
+    while #rows > maxRows do
+        table.remove(rows)
+    end
+
+    return rows
+end
+
+exports('GetRiskScore', function(sourceOrIdentifier)
+    local profile = GetRiskProfile(sourceOrIdentifier)
+    return {
+        identifier = profile.identifier,
+        score = profile.score,
+        lastDecay = profile.lastDecay,
+        lastAction = profile.lastAction
+    }
+end)
+exports('GetRiskProfile', GetRiskProfile)
+exports('GetTopRiskProfiles', GetTopRiskProfiles)
+
+CreateThread(function()
+    if _RiskPersistenceState.flushThreadStarted then
+        return
+    end
+
+    _RiskPersistenceState.flushThreadStarted = true
+
+    while true do
+        local riskCfg = _GetRiskConfig()
+        local persistenceCfg = _GetRiskPersistenceConfig(riskCfg)
+
+        if persistenceCfg.enabled == true and _CanAwaitRiskQuery() then
+            if not _RiskPersistenceState.loaded then
+                local ok, err = pcall(function()
+                    _PrunePersistedRiskProfiles(persistenceCfg)
+                    _LoadPersistedRiskProfiles()
+                end)
+                if not ok then
+                    if LyxGuardLib and LyxGuardLib.Warn then
+                        LyxGuardLib.Warn('[RISK] Persistence init retry: %s', tostring(err))
+                    else
+                        print(('[LyxGuard][RISK] Persistence init retry: %s'):format(tostring(err)))
+                    end
+                    Wait(5000)
+                    goto continue
+                end
+            end
+
+            local dirty = {}
+            for identifier in pairs(_RiskPersistenceState.dirty) do
+                dirty[#dirty + 1] = identifier
+            end
+
+            if #dirty > 0 then
+                for _, identifier in ipairs(dirty) do
+                    local ok, err = pcall(_FlushRiskProfile, identifier, persistenceCfg, riskCfg)
+                    if not ok then
+                        if LyxGuardLib and LyxGuardLib.Warn then
+                            LyxGuardLib.Warn('[RISK] Flush failed for %s: %s', tostring(identifier), tostring(err))
+                        else
+                            print(('[LyxGuard][RISK] Flush failed for %s: %s'):format(tostring(identifier), tostring(err)))
+                        end
+                    end
+                end
+            end
+
+            Wait(persistenceCfg.flushIntervalMs)
+        else
+            Wait(10000)
+        end
+
+        ::continue::
+    end
 end)
 
 -- Get ESX (bounded wait, unified with bootstrap.lua)
@@ -107,17 +592,6 @@ CreateThread(function()
 
     _G.ESX = _G.ESX or ESX
 end)
-
--- Helper function to get player identifier
-local function GetIdentifier(source, idType)
-    idType = idType or 'license'
-    for _, id in ipairs(GetPlayerIdentifiers(source)) do
-        if string.find(id, idType .. ':') then
-            return id
-        end
-    end
-    return 'unknown'
-end
 
 -- 
 -- EVENT RATE LIMITING
@@ -179,13 +653,27 @@ local _PtfxHistory = {}
 local _ClearPedTasksHistory = {}
 local _EntityVehicleHistory = {}
 local _EntityPedHistory = {}
+local _ProjectileHistory = {}
+local _WeaponDamageEventHistory = {}
+local _EntityRemovedHistory = {}
 local _EntityFirewallState = {} -- [source] = { windowStart, counts, models, strikes, lastStrike }
+local _TrackedEntityOwners = {} -- [entity] = { owner, entityType, model, createdAtMs }
 
 local function _GetMinuteCounter(tbl, source)
     local now = os.time()
     local t = tbl[source]
     if not t or (now - (t.first or 0)) >= 60 then
         t = { first = now, count = 0 }
+        tbl[source] = t
+    end
+    return t
+end
+
+local function _GetWindowCounter(tbl, source, windowMs)
+    local nowMs = GetGameTimer()
+    local t = tbl[source]
+    if not t or (nowMs - (t.firstMs or 0)) >= (tonumber(windowMs) or 10000) then
+        t = { firstMs = nowMs, count = 0, extra = {} }
         tbl[source] = t
     end
     return t
@@ -277,6 +765,9 @@ end
 
 local _BlacklistedPedModels = _BuildHashLookup(Config and Config.Ultra and Config.Ultra.modelExploit and Config.Ultra.modelExploit.blacklistedModels)
 local _BlacklistedWeaponHashes = _BuildHashLookup(Config and Config.Blacklists and Config.Blacklists.weapons and Config.Blacklists.weapons.list)
+local _BlacklistedPtfxEffects = _BuildHashLookup(Config and Config.Entities and Config.Entities.ptfx and Config.Entities.ptfx.blacklistedEffects)
+local _BlacklistedProjectileWeaponHashes = _BuildHashLookup(Config and Config.Entities and Config.Entities.projectile and Config.Entities.projectile.blacklistedWeapons)
+local _BlacklistedProjectileHashes = _BuildHashLookup(Config and Config.Entities and Config.Entities.projectile and Config.Entities.projectile.blacklistedProjectiles)
 
 AddEventHandler('explosionEvent', function(sender, ev)
     if not _IsSourceValid(sender) then return end
@@ -361,20 +852,31 @@ AddEventHandler('ptFxEvent', function(sender, data)
     local counter = _GetMinuteCounter(_PtfxHistory, sender)
     counter.count = (counter.count or 0) + 1
 
+    local effectHash = data and tonumber(data.effectHash) or nil
+    local isBlacklistedEffect = effectHash ~= nil and _BlacklistedPtfxEffects[effectHash] == true
     local maxPerMinute = tonumber(cfg.maxPerMinute) or 0
+    local shouldBlock = isBlacklistedEffect == true
     if maxPerMinute > 0 and counter.count > maxPerMinute then
+        shouldBlock = true
+    end
+
+    if shouldBlock then
         CancelEvent()
 
         MarkPlayerSuspicious(sender, 'ptfx_event', {
             count = counter.count,
-            maxPerMinute = maxPerMinute
+            maxPerMinute = maxPerMinute,
+            effectHash = effectHash,
+            blacklisted = isBlacklistedEffect == true
         })
 
         if ApplyPunishment then
             ApplyPunishment(sender, 'ptfx', cfg, {
                 reason = 'PTFX spam bloqueado (server-side)',
                 count = counter.count,
-                maxPerMinute = maxPerMinute
+                maxPerMinute = maxPerMinute,
+                effectHash = effectHash,
+                blacklisted = isBlacklistedEffect == true
             }, _GetPlayerCoords(sender))
         end
     end
@@ -425,8 +927,15 @@ AddEventHandler('entityCreating', function(entity)
         return
     end
 
-    local fwCfg = Config and Config.Entities and Config.Entities.entityFirewall or nil
     local nowMs = GetGameTimer()
+    _TrackedEntityOwners[entity] = {
+        owner = owner,
+        entityType = entType,
+        model = model,
+        createdAtMs = nowMs
+    }
+
+    local fwCfg = Config and Config.Entities and Config.Entities.entityFirewall or nil
 
     -- Legacy checks (per-minute) for vehicles/peds (backwards compatibility)
     local legacyShouldBlock = false
@@ -547,6 +1056,7 @@ AddEventHandler('entityCreating', function(entity)
 
     if not fwCfg or fwCfg.cancelOnViolation ~= false or legacyShouldBlock then
         CancelEvent()
+        _TrackedEntityOwners[entity] = nil
     end
 
     MarkPlayerSuspicious(owner, 'entity_firewall', {
@@ -599,6 +1109,207 @@ AddEventHandler('giveWeaponEvent', function(sender, data)
                 reason = 'GiveWeaponEvent bloqueado (arma prohibida)',
                 weapon = weaponHash
             }, _GetPlayerCoords(sender))
+        end
+    end
+end)
+
+AddEventHandler('startProjectileEvent', function(sender, data)
+    if not _IsSourceValid(sender) then return end
+    if _IsPlayerImmuneOrSafe(sender, 'projectile') then return end
+
+    local cfg = Config and Config.Entities and Config.Entities.projectile or nil
+    if not cfg or cfg.enabled ~= true then return end
+
+    local counter = _GetWindowCounter(_ProjectileHistory, sender, tonumber(cfg.windowMs) or 10000)
+    counter.count = (counter.count or 0) + 1
+
+    local weaponHash = type(data) == 'table' and (tonumber(data.weaponHash) or tonumber(data.weaponType)) or nil
+    local projectileHash = type(data) == 'table' and tonumber(data.projectileHash) or nil
+    local singleBullet = type(data) == 'table' and data.commandFireSingleBullet == true
+    if singleBullet then
+        counter.extra.singleBullets = (tonumber(counter.extra.singleBullets) or 0) + 1
+    end
+
+    local violation = nil
+    if (weaponHash and (_BlacklistedProjectileWeaponHashes[weaponHash] or _BlacklistedWeaponHashes[weaponHash]))
+        or (projectileHash and _BlacklistedProjectileHashes[projectileHash])
+    then
+        violation = 'blacklisted_projectile'
+    elseif (tonumber(cfg.maxPerWindow) or 0) > 0 and counter.count > (tonumber(cfg.maxPerWindow) or 0) then
+        violation = 'projectile_spam'
+    elseif singleBullet and (tonumber(cfg.maxSingleBulletPerWindow) or 0) > 0
+        and (tonumber(counter.extra.singleBullets) or 0) > (tonumber(cfg.maxSingleBulletPerWindow) or 0)
+    then
+        violation = 'single_bullet_abuse'
+    end
+
+    if not violation then
+        return
+    end
+
+    if cfg.cancelOnViolation ~= false then
+        CancelEvent()
+    end
+
+    local coords = nil
+    if type(data) == 'table' then
+        local x = tonumber(data.initialPositionX or data.firePositionX)
+        local y = tonumber(data.initialPositionY or data.firePositionY)
+        local z = tonumber(data.initialPositionZ or data.firePositionZ)
+        if x and y and z then
+            coords = vector3(x, y, z)
+        end
+    end
+    coords = coords or _GetPlayerCoords(sender)
+
+    local details = {
+        violation = violation,
+        count = counter.count,
+        maxPerWindow = tonumber(cfg.maxPerWindow) or 0,
+        singleBullets = tonumber(counter.extra.singleBullets) or 0,
+        maxSingleBullets = tonumber(cfg.maxSingleBulletPerWindow) or 0,
+        weaponHash = weaponHash,
+        projectileHash = projectileHash
+    }
+
+    MarkPlayerSuspicious(sender, 'projectile_event', details)
+
+    if ApplyPunishment then
+        ApplyPunishment(sender, 'projectile', cfg, {
+            reason = 'startProjectileEvent bloqueado (server-side)',
+            violation = violation,
+            count = counter.count,
+            weaponHash = weaponHash,
+            projectileHash = projectileHash
+        }, coords)
+    end
+end)
+
+AddEventHandler('weaponDamageEvent', function(sender, data)
+    if not _IsSourceValid(sender) then return end
+    if _IsPlayerImmuneOrSafe(sender, 'weapon') then return end
+
+    local cfg = Config and Config.Entities and Config.Entities.weaponDamage or nil
+    if not cfg or cfg.enabled ~= true then return end
+
+    local counter = _GetWindowCounter(_WeaponDamageEventHistory, sender, tonumber(cfg.windowMs) or 5000)
+    counter.count = (counter.count or 0) + 1
+
+    local weaponHash = type(data) == 'table' and (tonumber(data.weaponType) or tonumber(data.weaponHash)) or nil
+    local weaponDamage = type(data) == 'table' and (tonumber(data.weaponDamage) or tonumber(data.damage)) or 0
+    local hitGlobalIds = type(data) == 'table' and data.hitGlobalIds or nil
+    local hitCount = type(hitGlobalIds) == 'table' and #hitGlobalIds or 0
+    local overrideDamage = type(data) == 'table' and data.overrideDefaultDamage == true or false
+    local willKill = type(data) == 'table' and data.willKill == true or false
+    local maxDamage = tonumber(cfg.maxDamage) or 250
+    local maxHitGlobalIds = tonumber(cfg.maxHitGlobalIds) or 4
+    local maxEventsPerWindow = tonumber(cfg.maxEventsPerWindow) or 0
+
+    local violation = nil
+    if weaponHash and _BlacklistedWeaponHashes[weaponHash] then
+        violation = 'blacklisted_weapon'
+    elseif weaponDamage > maxDamage and (overrideDamage or weaponDamage > (maxDamage * 2)) then
+        violation = 'damage_override'
+    elseif maxHitGlobalIds > 0 and hitCount > maxHitGlobalIds then
+        violation = 'multi_target_damage'
+    elseif maxEventsPerWindow > 0 and counter.count > maxEventsPerWindow then
+        violation = 'weapon_damage_spam'
+    elseif willKill and overrideDamage and weaponDamage > math.max(75, math.floor(maxDamage * 0.75)) then
+        violation = 'forced_kill_damage'
+    end
+
+    if not violation then
+        return
+    end
+
+    if cfg.cancelOnViolation ~= false then
+        CancelEvent()
+    end
+
+    local details = {
+        violation = violation,
+        count = counter.count,
+        maxPerWindow = maxEventsPerWindow,
+        weaponHash = weaponHash,
+        weaponDamage = weaponDamage,
+        hitCount = hitCount,
+        overrideDefaultDamage = overrideDamage,
+        willKill = willKill
+    }
+
+    MarkPlayerSuspicious(sender, 'weapon_damage_event', details)
+
+    if ApplyPunishment then
+        ApplyPunishment(sender, 'weapon_damage', cfg, {
+            reason = 'weaponDamageEvent anomalo (server-side)',
+            violation = violation,
+            count = counter.count,
+            weaponHash = weaponHash,
+            weaponDamage = weaponDamage,
+            hitCount = hitCount,
+            overrideDefaultDamage = overrideDamage,
+            willKill = willKill
+        }, _GetPlayerCoords(sender))
+    end
+end)
+
+AddEventHandler('entityRemoved', function(entity)
+    local tracked = _TrackedEntityOwners[entity]
+    _TrackedEntityOwners[entity] = nil
+
+    if type(tracked) ~= 'table' then
+        return
+    end
+
+    local owner = tonumber(tracked.owner)
+    if not _IsSourceValid(owner) then return end
+    if _IsPlayerImmuneOrSafe(owner, 'entity') then return end
+
+    local cfg = Config and Config.Entities and Config.Entities.entityRemoved or nil
+    if not cfg or cfg.enabled ~= true then return end
+
+    local counter = _GetWindowCounter(_EntityRemovedHistory, owner, tonumber(cfg.windowMs) or 10000)
+    counter.count = (counter.count or 0) + 1
+
+    local maxPerWindow = tonumber(cfg.maxPerWindow) or 0
+    if maxPerWindow <= 0 or counter.count <= maxPerWindow then
+        return
+    end
+
+    local details = {
+        count = counter.count,
+        maxPerWindow = maxPerWindow,
+        entityType = tracked.entityType,
+        model = tracked.model,
+        ageMs = math.max(0, GetGameTimer() - (tonumber(tracked.createdAtMs) or GetGameTimer()))
+    }
+
+    MarkPlayerSuspicious(owner, 'entity_removed_burst', details)
+
+    if ApplyPunishment then
+        ApplyPunishment(owner, 'entity_removed', cfg, {
+            reason = 'entityRemoved burst observado (server-side)',
+            count = counter.count,
+            maxPerWindow = maxPerWindow,
+            entityType = tracked.entityType,
+            model = tracked.model
+        }, _GetPlayerCoords(owner))
+    end
+end)
+
+CreateThread(function()
+    while true do
+        Wait(60000)
+
+        local nowMs = GetGameTimer()
+        for entity, tracked in pairs(_TrackedEntityOwners) do
+            local stale = type(tracked) ~= 'table'
+                or (tonumber(tracked.createdAtMs) or 0) <= 0
+                or (nowMs - (tonumber(tracked.createdAtMs) or 0)) > 120000
+
+            if stale or not DoesEntityExist(entity) then
+                _TrackedEntityOwners[entity] = nil
+            end
         end
     end
 end)
@@ -777,10 +1488,17 @@ local function _ApplyBurstPattern(source, identifier, reason, details)
         if cfg.addRiskPoints > 0 then
             local r = _RiskScores[identifier]
             if not r then
-                r = { score = 0, lastDecay = nowMs, lastAction = 0 }
+                local riskNowMs = _NowRiskMs()
+                r = { score = 0, lastDecay = riskNowMs, lastAction = 0, lastUpdate = riskNowMs, playerName = GetPlayerName(source) }
+            else
+                _NormalizeRiskRecord(r, _NowRiskMs())
             end
             r.score = (tonumber(r.score) or 0) + cfg.addRiskPoints
+            r.lastUpdate = _NowRiskMs()
+            r.lastReason = 'burst_pattern'
+            r.playerName = GetPlayerName(source) or r.playerName
             _RiskScores[identifier] = r
+            _MarkRiskDirty(identifier)
             burstMeta.risk_bonus = cfg.addRiskPoints
             burstMeta.risk_score_after_bonus = r.score
         end
@@ -830,7 +1548,7 @@ function MarkPlayerSuspicious(source, reason, details)
     end
 
     if not SuspiciousPlayers[identifier] then
-        SuspiciousPlayers[identifier] = { flags = {}, firstFlag = os.time() }
+        SuspiciousPlayers[identifier] = { flags = {}, firstFlag = os.time(), playerName = playerName }
     end
 
     table.insert(SuspiciousPlayers[identifier].flags, {
@@ -838,6 +1556,8 @@ function MarkPlayerSuspicious(source, reason, details)
         details = details,
         time = os.time()
     })
+    SuspiciousPlayers[identifier].playerName = playerName or SuspiciousPlayers[identifier].playerName
+    SuspiciousPlayers[identifier].flagCount = math.max(_GetSuspiciousFlagCount(SuspiciousPlayers[identifier]), #SuspiciousPlayers[identifier].flags)
 
     _PushExLog({
         level = 'warn',
@@ -861,56 +1581,101 @@ function MarkPlayerSuspicious(source, reason, details)
 
     local riskCfg = Config and Config.Risk or nil
     if riskCfg and riskCfg.enabled == true and identifier and identifier ~= 'unknown' then
-        local nowMs = GetGameTimer()
+        local nowMs = _NowRiskMs()
         local r = _RiskScores[identifier]
         if not r then
-            r = { score = 0, lastDecay = nowMs, lastAction = 0 }
+            r = { score = 0, lastDecay = nowMs, lastAction = 0, lastUpdate = nowMs, playerName = playerName }
             _RiskScores[identifier] = r
         end
 
-        local decayMs = tonumber(riskCfg.decayMs) or (5 * 60 * 1000)
-        local decayPoints = tonumber(riskCfg.decayPoints) or 15
-        if decayMs > 0 and decayPoints > 0 then
-            local elapsed = nowMs - (r.lastDecay or nowMs)
-            if elapsed >= decayMs then
-                local steps = math.floor(elapsed / decayMs)
-                r.score = math.max(0, (r.score or 0) - (steps * decayPoints))
-                r.lastDecay = nowMs
-            end
-        end
+        _NormalizeRiskRecord(r, nowMs)
+        _ApplyRiskDecay(r, nowMs, riskCfg)
 
+        local previousScore = tonumber(r.score) or 0
         local pts = tonumber((riskCfg.points and riskCfg.points[reason]) or riskCfg.defaultPoints) or 10
         r.score = (r.score or 0) + pts
+        r.lastReason = reason
+        r.lastUpdate = nowMs
+        r.playerName = playerName or r.playerName
         _RiskScores[identifier] = r
 
+        local thresholds = _GetRiskThresholds(riskCfg)
+        local riskLevel = _GetRiskLevel(r.score, riskCfg)
         details._risk = {
             score = r.score,
-            added = pts
+            added = pts,
+            level = riskLevel
         }
 
-        local thr = riskCfg.thresholds or {}
-        local kickAt = tonumber(thr.kick) or 80
-        local tempAt = tonumber(thr.tempBan) or 140
-        local permAt = tonumber(thr.permBan) or 220
         local cooldownMs = tonumber(riskCfg.actionCooldownMs) or (60 * 1000)
+        local alertCooldownMs = tonumber(riskCfg.alertCooldownMs) or math.min(cooldownMs, 45 * 1000)
+
+        local crossedNotify = previousScore < thresholds.notify and r.score >= thresholds.notify
+        local crossedStaffAlert = previousScore < thresholds.staffAlert and r.score >= thresholds.staffAlert
+        local canNotify = crossedNotify or crossedStaffAlert or
+            (r.score >= thresholds.staffAlert and (nowMs - (tonumber(r.lastAlert) or 0)) >= alertCooldownMs)
+
+        if canNotify then
+            r.lastAlert = nowMs
+            _RiskScores[identifier] = r
+
+            _PushExLog({
+                level = crossedStaffAlert and 'high' or 'warn',
+                actor_type = 'player',
+                actor_id = identifier,
+                actor_name = playerName,
+                resource = 'lyx-guard',
+                action = 'risk_score',
+                event = tostring(reason),
+                result = 'threshold',
+                reason = 'risk_score_escalation',
+                metadata = {
+                    source = source,
+                    score = r.score,
+                    previousScore = previousScore,
+                    added = pts,
+                    level = riskLevel
+                }
+            })
+
+            TriggerEvent('lyxguard:onRiskEscalation', source, {
+                identifier = identifier,
+                playerName = playerName,
+                score = r.score,
+                previousScore = previousScore,
+                level = riskLevel,
+                lastSignal = reason,
+                added = pts
+            })
+
+            if r.score >= thresholds.staffAlert then
+                TriggerEvent('lyxguard:notifyAdmins', source, 'risk_score', {
+                    identifier = identifier,
+                    score = r.score,
+                    level = riskLevel,
+                    lastSignal = reason,
+                    added = pts
+                })
+            end
+        end
 
         if riskCfg.enforcePunishments == true and ApplyPunishment and GetPlayerName(source) and
             (nowMs - (r.lastAction or 0)) >= cooldownMs then
             local punishment = nil
             local cfg = nil
 
-            if r.score >= permAt then
+            if r.score >= thresholds.permBan then
                 punishment = 'ban_perm'
                 cfg = { enabled = true, punishment = punishment, tolerance = 1 }
-            elseif r.score >= tempAt then
+            elseif r.score >= thresholds.tempBan then
                 punishment = 'ban_temp'
                 cfg = {
                     enabled = true,
                     punishment = punishment,
                     tolerance = 1,
-                    banDuration = thr.tempBanDuration or 'long'
+                    banDuration = ((riskCfg.thresholds or {}).tempBanDuration) or 'long'
                 }
-            elseif r.score >= kickAt then
+            elseif r.score >= thresholds.kick then
                 punishment = 'kick'
                 cfg = { enabled = true, punishment = punishment, tolerance = 1 }
             end
@@ -927,6 +1692,8 @@ function MarkPlayerSuspicious(source, reason, details)
                 }, _GetPlayerCoords(source))
             end
         end
+
+        _MarkRiskDirty(identifier)
     end
 
     -- -----------------------------------------------------------------------
@@ -1330,13 +2097,40 @@ AddEventHandler('playerDropped', function()
     _ClearPedTasksHistory[source] = nil
     _EntityVehicleHistory[source] = nil
     _EntityPedHistory[source] = nil
+    _ProjectileHistory[source] = nil
+    _WeaponDamageEventHistory[source] = nil
+    _EntityRemovedHistory[source] = nil
     _EntityFirewallState[source] = nil
     _YankValidateCooldown[source] = nil
 
     if identifier and identifier ~= 'unknown' then
-        _RiskScores[identifier] = nil
-        SuspiciousPlayers[identifier] = nil
+        _MarkRiskDirty(identifier)
+        local persistenceCfg = _GetRiskPersistenceConfig(_GetRiskConfig())
+        if persistenceCfg.enabled ~= true then
+            _RiskScores[identifier] = nil
+            SuspiciousPlayers[identifier] = nil
+        end
         _BurstSignals[identifier] = nil
+    end
+end)
+
+AddEventHandler('onResourceStop', function(resourceName)
+    if resourceName ~= GetCurrentResourceName() then
+        return
+    end
+
+    local riskCfg = _GetRiskConfig()
+    local persistenceCfg = _GetRiskPersistenceConfig(riskCfg)
+    if persistenceCfg.enabled ~= true or not _CanAwaitRiskQuery() then
+        return
+    end
+
+    for identifier in pairs(_RiskScores) do
+        _RiskPersistenceState.dirty[identifier] = true
+    end
+
+    for identifier in pairs(_RiskPersistenceState.dirty) do
+        pcall(_FlushRiskProfile, identifier, persistenceCfg, riskCfg)
     end
 end)
 

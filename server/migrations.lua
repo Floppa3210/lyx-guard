@@ -249,6 +249,36 @@ local MIGRATIONS = {
                 _Exec('ALTER TABLE lyxguard_bans ADD INDEX idx_identifier_fingerprint (identifier_fingerprint)')
             end)
         end
+    },
+    {
+        version = 3,
+        name = 'risk_profile_persistence',
+        up = function()
+            _Exec([[
+                CREATE TABLE IF NOT EXISTS lyxguard_risk_profiles (
+                    identifier VARCHAR(255) NOT NULL PRIMARY KEY,
+                    player_name VARCHAR(100) DEFAULT NULL,
+                    score INT NOT NULL DEFAULT 0,
+                    last_decay_ms BIGINT UNSIGNED NOT NULL DEFAULT 0,
+                    last_action_ms BIGINT UNSIGNED NOT NULL DEFAULT 0,
+                    last_alert_ms BIGINT UNSIGNED NOT NULL DEFAULT 0,
+                    last_update_ms BIGINT UNSIGNED NOT NULL DEFAULT 0,
+                    last_reason VARCHAR(100) DEFAULT NULL,
+                    flag_count INT UNSIGNED NOT NULL DEFAULT 0,
+                    first_flag_ts BIGINT UNSIGNED DEFAULT NULL,
+                    recent_signals JSON DEFAULT NULL,
+                    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+                    INDEX idx_score (score),
+                    INDEX idx_last_update_ms (last_update_ms),
+                    INDEX idx_updated_at (updated_at)
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+            ]])
+
+            _EnsureColumn('lyxguard_risk_profiles', 'player_name',
+                'ALTER TABLE lyxguard_risk_profiles ADD COLUMN player_name VARCHAR(100) DEFAULT NULL AFTER identifier')
+            _EnsureColumn('lyxguard_risk_profiles', 'last_alert_ms',
+                'ALTER TABLE lyxguard_risk_profiles ADD COLUMN last_alert_ms BIGINT UNSIGNED NOT NULL DEFAULT 0 AFTER last_action_ms')
+        end
     }
 }
 

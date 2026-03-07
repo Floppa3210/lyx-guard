@@ -20,6 +20,63 @@ local function _NowMs()
     return GetGameTimer()
 end
 
+local function _GetGuardRiskExport(fnName, ...)
+    local resource = GetCurrentResourceName()
+    if not exports or not exports[resource] or type(exports[resource][fnName]) ~= 'function' then
+        return nil
+    end
+
+    local ok, result = pcall(function(...)
+        return exports[resource][fnName](...)
+    end, ...)
+    if ok then
+        return result
+    end
+    return nil
+end
+
+local function _GetRiskThresholdValue(name, defaultValue)
+    local thresholds = Config and Config.Risk and Config.Risk.thresholds or nil
+    return tonumber(thresholds and thresholds[name]) or tonumber(defaultValue) or 0
+end
+
+local function _GetRiskProfile(identifier)
+    local profile = _GetGuardRiskExport('GetRiskProfile', identifier)
+    if type(profile) ~= 'table' then
+        return {
+            identifier = tostring(identifier or 'unknown'),
+            score = 0,
+            level = 'low',
+            flagCount = 0,
+            recentSignals = {}
+        }
+    end
+    return profile
+end
+
+local function _GetTopRiskProfiles(limit, minScore)
+    local rows = _GetGuardRiskExport('GetTopRiskProfiles', limit, minScore)
+    if type(rows) == 'table' then
+        return rows
+    end
+    return {}
+end
+
+local function _FindOnlinePlayerNameByIdentifier(identifier)
+    if type(identifier) ~= 'string' or identifier == '' or type(GetIdentifier) ~= 'function' then
+        return nil
+    end
+
+    for _, src in ipairs(GetPlayers()) do
+        local playerId = tonumber(src)
+        if playerId and GetIdentifier(playerId, 'license') == identifier then
+            return GetPlayerName(playerId)
+        end
+    end
+
+    return nil
+end
+
 local function _AuditGuardAction(src, action, result, reason, targetId, targetName, metadata)
     if type(LyxGuardPushExhaustiveLog) ~= 'function' then
         return
@@ -320,6 +377,57 @@ local function _IsRateLimited(src, key, cooldownMs)
     return false
 end
 
+local _PanelQueryCache = {
+    stats = {
+        value = nil,
+        expiresAtMs = 0,
+        ttlMs = 5000
+    },
+    recentEvents = {},
+    playerDetails = {}
+}
+
+local function _ReadPanelCache(entry)
+    if type(entry) ~= 'table' or entry.value == nil then
+        return nil
+    end
+    if (tonumber(entry.expiresAtMs) or 0) <= _NowMs() then
+        return nil
+    end
+    return entry.value
+end
+
+local function _WritePanelCache(entry, value, ttlMs)
+    if type(entry) ~= 'table' then
+        return value
+    end
+    entry.value = value
+    entry.expiresAtMs = _NowMs() + math.max(tonumber(ttlMs or entry.ttlMs) or 0, 250)
+    return value
+end
+
+local function _InvalidatePanelQueryCache(opts)
+    opts = opts or {}
+
+    if opts.stats ~= false then
+        _PanelQueryCache.stats.value = nil
+        _PanelQueryCache.stats.expiresAtMs = 0
+    end
+
+    if opts.recentEvents ~= false then
+        _PanelQueryCache.recentEvents = {}
+    end
+
+    if opts.playerDetails ~= false then
+        local identifier = opts.identifier and tostring(opts.identifier) or ''
+        if identifier ~= '' then
+            _PanelQueryCache.playerDetails[identifier] = nil
+        else
+            _PanelQueryCache.playerDetails = {}
+        end
+    end
+end
+
 -- 
 -- CONTROL DE ACCESO
 -- 
@@ -478,23 +586,131 @@ end
 -- STATS & DATA
 -- 
 
-local function GetPanelStats()
-    local stats = {
-        players = #GetPlayers(),
-        maxPlayers = GetConvarInt('sv_maxclients', 32),
-        detectionsToday = MySQL.Sync.fetchScalar(
-            'SELECT COUNT(*) FROM lyxguard_detections WHERE DATE(detection_date) = CURDATE()') or 0,
-        bansActive = MySQL.Sync.fetchScalar('SELECT COUNT(*) FROM lyxguard_bans WHERE active = 1') or 0,
-        warnings = MySQL.Sync.fetchScalar('SELECT COUNT(*) FROM lyxguard_warnings WHERE active = 1') or 0
-    }
-    return stats
+local function GetPanelStatsAsync(cb, forceRefresh)
+    if type(cb) ~= 'function' then return end
+
+    local cached = forceRefresh ~= true and _ReadPanelCache(_PanelQueryCache.stats)
+    if cached then
+        cb(cached)
+        return
+    end
+
+    MySQL.query([[
+        SELECT
+            (SELECT COUNT(*) FROM lyxguard_detections WHERE DATE(detection_date) = CURDATE()) AS detectionsToday,
+            (SELECT COUNT(*) FROM lyxguard_bans WHERE active = 1) AS bansActive,
+            (SELECT COUNT(*) FROM lyxguard_warnings WHERE active = 1) AS warnings
+    ]], {}, function(rows)
+        local row = rows and rows[1] or {}
+        local notifyAt = _GetRiskThresholdValue('notify', 20)
+        local staffAlertAt = _GetRiskThresholdValue('staffAlert', 60)
+        local suspiciousProfiles = _GetTopRiskProfiles(500, notifyAt)
+        local highRiskProfiles = _GetTopRiskProfiles(500, staffAlertAt)
+        local stats = {
+            players = #GetPlayers(),
+            maxPlayers = GetConvarInt('sv_maxclients', 32),
+            detectionsToday = tonumber(row and row.detectionsToday) or 0,
+            bansActive = tonumber(row and row.bansActive) or 0,
+            warnings = tonumber(row and row.warnings) or 0,
+            suspicious = #suspiciousProfiles,
+            highRiskPlayers = #highRiskProfiles
+        }
+        cb(_WritePanelCache(_PanelQueryCache.stats, stats, _PanelQueryCache.stats.ttlMs))
+    end)
 end
 
-local function GetRecentEvents(limit)
-    return MySQL.Sync.fetchAll([[
+local function GetRecentEventsAsync(limit, cb, forceRefresh)
+    if type(cb) ~= 'function' then return end
+
+    limit = math.floor(tonumber(limit) or 20)
+    if limit < 1 then limit = 1 end
+    if limit > 100 then limit = 100 end
+
+    local cacheKey = tostring(limit)
+    local entry = _PanelQueryCache.recentEvents[cacheKey]
+    if not entry then
+        entry = {
+            value = nil,
+            expiresAtMs = 0,
+            ttlMs = 3000
+        }
+        _PanelQueryCache.recentEvents[cacheKey] = entry
+    end
+
+    local cached = forceRefresh ~= true and _ReadPanelCache(entry)
+    if cached then
+        cb(cached)
+        return
+    end
+
+    MySQL.query([[
         SELECT 'detection' as type, player_name, detection_type, detection_date as time, identifier
         FROM lyxguard_detections ORDER BY detection_date DESC LIMIT ?
-    ]], { limit or 20 }) or {}
+    ]], { limit }, function(rows)
+        cb(_WritePanelCache(entry, rows or {}, entry.ttlMs))
+    end)
+end
+
+local function GetPlayerDetailsAsync(identifier, cb, forceRefresh)
+    if type(cb) ~= 'function' then return end
+
+    identifier = tostring(identifier or ''):gsub('%s+', '')
+    if identifier == '' then
+        cb({})
+        return
+    end
+
+    local entry = _PanelQueryCache.playerDetails[identifier]
+    if not entry then
+        entry = {
+            value = nil,
+            expiresAtMs = 0,
+            ttlMs = 5000
+        }
+        _PanelQueryCache.playerDetails[identifier] = entry
+    end
+
+    local cached = forceRefresh ~= true and _ReadPanelCache(entry)
+    if cached then
+        cb(cached)
+        return
+    end
+
+    MySQL.query([[
+        SELECT
+            COALESCE((
+                SELECT player_name
+                FROM lyxguard_detections
+                WHERE identifier = ?
+                ORDER BY detection_date DESC
+                LIMIT 1
+            ), 'Unknown') AS player_name,
+            (SELECT COUNT(*) FROM lyxguard_detections WHERE identifier = ?) AS detections,
+            (SELECT COUNT(*) FROM lyxguard_warnings WHERE identifier = ? AND active = 1) AS warnings,
+            (SELECT COUNT(*) FROM lyxguard_bans WHERE identifier = ?) AS bans
+    ]], { identifier, identifier, identifier, identifier }, function(rows)
+        local row = rows and rows[1] or {}
+        local risk = _GetRiskProfile(identifier)
+        local player = {
+            identifier = identifier,
+            name = tostring(row.player_name or risk.playerName or 'Unknown'),
+            detections = tonumber(row.detections) or 0,
+            warnings = tonumber(row.warnings) or 0,
+            bans = tonumber(row.bans) or 0,
+            riskScore = tonumber(risk.score) or 0,
+            riskLevel = tostring(risk.level or 'low'),
+            riskSignals = tonumber(risk.flagCount) or 0,
+            lastRiskSignal = risk.lastReason,
+            recentRiskSignals = risk.recentSignals or {}
+        }
+        cb(_WritePanelCache(entry, player, entry.ttlMs))
+    end)
+end
+
+local function BroadcastStatsRefresh()
+    GetPanelStatsAsync(function(stats)
+        BroadcastToPanelAdmins('refreshStats', stats or {})
+    end, true)
 end
 
 -- 
@@ -510,13 +726,17 @@ RegisterNetEvent('lyxguard:panel:open', function()
 
     local security = _IssueGuardPanelActionSession(src, true)
     PanelAdmins[src] = true
-    TriggerClientEvent('lyxguard:panel:openUI', src, {
-        config = { soundEnabled = true, autoRefresh = true },
-        stats = GetPanelStats(),
-        recentEvents = GetRecentEvents(20),
-        security = security or { enabled = false }
-    })
-    _AuditGuardAction(src, 'guard_panel_open', 'allowed')
+    GetPanelStatsAsync(function(stats)
+        GetRecentEventsAsync(20, function(recentEvents)
+            TriggerClientEvent('lyxguard:panel:openUI', src, {
+                config = { soundEnabled = true, autoRefresh = true },
+                stats = stats or {},
+                recentEvents = recentEvents or {},
+                security = security or { enabled = false }
+            })
+            _AuditGuardAction(src, 'guard_panel_open', 'allowed')
+        end)
+    end)
 end)
 
 RegisterNetEvent('lyxguard:panel:close', function()
@@ -548,12 +768,14 @@ CreateThread(function()
 
     ESX.RegisterServerCallback('lyxguard:panel:getStats', function(source, cb)
         if not HasPanelAccess(source) then return cb({}) end
-        cb(GetPanelStats())
+        GetPanelStatsAsync(cb)
     end)
 
     ESX.RegisterServerCallback('lyxguard:panel:getRecentActivity', function(source, cb)
         if not HasPanelAccess(source) then return cb({ events = {} }) end
-        cb({ events = GetRecentEvents(20) })
+        GetRecentEventsAsync(20, function(events)
+            cb({ events = events or {} })
+        end)
     end)
 
     ESX.RegisterServerCallback('lyxguard:panel:getDetections', function(source, cb, data)
@@ -599,15 +821,76 @@ CreateThread(function()
 
     ESX.RegisterServerCallback('lyxguard:panel:getSuspicious', function(source, cb)
         if not HasPanelAccess(source) then return cb({ players = {} }) end
+        local notifyAt = _GetRiskThresholdValue('notify', 20)
         MySQL.query([[
-            SELECT identifier, player_name, COUNT(*) as detection_count
-            FROM lyxguard_detections
+            SELECT d.identifier, MAX(d.player_name) as player_name,
+                   COUNT(*) as detection_count,
+                   (SELECT COUNT(*) FROM lyxguard_warnings w WHERE w.identifier = d.identifier AND w.active = 1) AS warning_count
+            FROM lyxguard_detections d
             WHERE detection_date >= DATE_SUB(NOW(), INTERVAL 24 HOUR)
-            GROUP BY identifier, player_name
+            GROUP BY d.identifier
             HAVING COUNT(*) >= 2
             ORDER BY detection_count DESC LIMIT 50
         ]], {}, function(r)
-            cb({ players = r or {} })
+            local merged = {}
+
+            for _, row in ipairs(r or {}) do
+                local identifier = tostring(row.identifier or '')
+                if identifier ~= '' then
+                    local risk = _GetRiskProfile(identifier)
+                    merged[identifier] = {
+                        identifier = identifier,
+                        player_name = tostring(row.player_name or risk.playerName or _FindOnlinePlayerNameByIdentifier(identifier) or 'Unknown'),
+                        detection_count = tonumber(row.detection_count) or 0,
+                        warning_count = tonumber(row.warning_count) or 0,
+                        risk_score = tonumber(risk.score) or 0,
+                        risk_level = tostring(risk.level or 'low'),
+                        risk_signals = tonumber(risk.flagCount) or 0,
+                        last_signal = risk.lastReason
+                    }
+                end
+            end
+
+            for _, risk in ipairs(_GetTopRiskProfiles(100, notifyAt)) do
+                local identifier = tostring(risk.identifier or '')
+                if identifier ~= '' then
+                    local row = merged[identifier]
+                    if not row then
+                        row = {
+                            identifier = identifier,
+                            player_name = risk.playerName or _FindOnlinePlayerNameByIdentifier(identifier) or 'Unknown',
+                            detection_count = 0,
+                            warning_count = 0
+                        }
+                        merged[identifier] = row
+                    end
+                    row.risk_score = tonumber(risk.score) or 0
+                    row.risk_level = tostring(risk.level or 'low')
+                    row.risk_signals = tonumber(risk.flagCount) or 0
+                    row.last_signal = risk.lastReason
+                end
+            end
+
+            local players = {}
+            for _, row in pairs(merged) do
+                players[#players + 1] = row
+            end
+
+            table.sort(players, function(a, b)
+                local riskA = tonumber(a.risk_score) or 0
+                local riskB = tonumber(b.risk_score) or 0
+                if riskA == riskB then
+                    local detA = tonumber(a.detection_count) or 0
+                    local detB = tonumber(b.detection_count) or 0
+                    if detA == detB then
+                        return tostring(a.player_name or '') < tostring(b.player_name or '')
+                    end
+                    return detA > detB
+                end
+                return riskA > riskB
+            end)
+
+            cb({ players = players })
         end)
     end)
 
@@ -616,24 +899,7 @@ CreateThread(function()
 
         local identifier = data and data.identifier
         if not identifier then return cb({}) end
-
-        local player = { identifier = identifier, name = 'Unknown', detections = 0, warnings = 0, bans = 0 }
-
-        -- Obtener nombre desde la ultima deteccion
-        local info = MySQL.Sync.fetchAll(
-            'SELECT player_name FROM lyxguard_detections WHERE identifier = ? ORDER BY detection_date DESC LIMIT 1',
-            { identifier })
-        if info and info[1] then player.name = info[1].player_name end
-
-        -- Conteos
-        player.detections = MySQL.Sync.fetchScalar('SELECT COUNT(*) FROM lyxguard_detections WHERE identifier = ?',
-            { identifier }) or 0
-        player.warnings = MySQL.Sync.fetchScalar(
-            'SELECT COUNT(*) FROM lyxguard_warnings WHERE identifier = ? AND active = 1', { identifier }) or 0
-        player.bans = MySQL.Sync.fetchScalar('SELECT COUNT(*) FROM lyxguard_bans WHERE identifier = ?', { identifier }) or
-            0
-
-        cb(player)
+        GetPlayerDetailsAsync(identifier, cb)
     end)
 
     print('^2[LyxGuard]^7 Panel callbacks registered')
@@ -672,6 +938,8 @@ RegisterNetEvent('lyxguard:panel:unban', function(data)
         { GetPlayerName(src), banId }, function(affected)
             if affected > 0 then
                 TriggerEvent('lyxguard:reloadBans')
+                _InvalidatePanelQueryCache()
+                BroadcastStatsRefresh()
                 BroadcastPanelEvent({ type = 'unban', player = 'ID:' .. banId, unbanBy = GetPlayerName(src) })
                 TriggerClientEvent('lyxguard:notify', src, 'success', 'Jugador desbaneado')
                 _AuditGuardAction(src, 'guard_panel_unban', 'allowed', nil, tostring(banId), 'BanID:' .. tostring(banId))
@@ -710,6 +978,8 @@ RegisterNetEvent('lyxguard:panel:removeWarning', function(data)
 
     MySQL.update('UPDATE lyxguard_warnings SET active = 0 WHERE id = ?', { warningId }, function(affected)
         if affected and affected > 0 then
+            _InvalidatePanelQueryCache()
+            BroadcastStatsRefresh()
             TriggerClientEvent('lyxguard:notify', src, 'success', 'Warning removido')
             _AuditGuardAction(src, 'guard_panel_remove_warning', 'allowed', nil, tostring(warningId),
                 'WarningID:' .. tostring(warningId))
@@ -798,8 +1068,11 @@ RegisterNetEvent('lyxguard:panel:banPlayer', function(data)
             unbanTime and os.date('%Y-%m-%d %H:%M:%S', unbanTime) or nil,
             isPermanent and 1 or 0,
             GetPlayerName(src)
-        })
-        TriggerEvent('lyxguard:reloadBans')
+        }, function()
+            TriggerEvent('lyxguard:reloadBans')
+            _InvalidatePanelQueryCache()
+            BroadcastStatsRefresh()
+        end)
     end
 
     BroadcastPanelEvent({ type = 'ban', player = playerName, reason = reason })
@@ -827,6 +1100,8 @@ RegisterNetEvent('lyxguard:panel:clearDetections', function(data)
 
     MySQL.Async.execute('TRUNCATE TABLE lyxguard_detections', {}, function()
         -- Notify all admins
+        _InvalidatePanelQueryCache()
+        BroadcastStatsRefresh()
         BroadcastToPanelAdmins('refreshDetections', {})
         TriggerClientEvent('lyxguard:notify', src, 'success', 'Detecciones limpiadas')
         _AuditGuardAction(src, 'guard_panel_clear_detections', 'allowed')
@@ -849,6 +1124,7 @@ end
 
 -- Hooks
 AddEventHandler('lyxguard:onDetection', function(src, detectionType, details, punishment)
+    _InvalidatePanelQueryCache()
     BroadcastPanelEvent({
         type = 'detection',
         player = GetPlayerName(src) or 'Unknown',
@@ -857,11 +1133,26 @@ AddEventHandler('lyxguard:onDetection', function(src, detectionType, details, pu
     })
 end)
 
+AddEventHandler('lyxguard:onRiskEscalation', function(src, snapshot)
+    _InvalidatePanelQueryCache()
+    BroadcastStatsRefresh()
+    BroadcastPanelEvent({
+        type = 'suspicious',
+        player = (snapshot and snapshot.playerName) or GetPlayerName(src) or 'Unknown',
+        score = snapshot and snapshot.score or 0,
+        level = snapshot and snapshot.level or 'low',
+        lastSignal = snapshot and snapshot.lastSignal or 'unknown',
+        message = ('Risk score %s (%s)'):format(tostring(snapshot and snapshot.score or 0), tostring(snapshot and snapshot.level or 'low'))
+    })
+end)
+
 AddEventHandler('lyxguard:onBan', function(src, reason, duration, bannedBy)
+    _InvalidatePanelQueryCache()
     BroadcastPanelEvent({ type = 'ban', player = GetPlayerName(src) or 'Unknown', reason = reason, bannedBy = bannedBy })
 end)
 
 AddEventHandler('lyxguard:onWarning', function(src, reason, warnedBy)
+    _InvalidatePanelQueryCache()
     BroadcastPanelEvent({
         type = 'warning',
         player = GetPlayerName(src) or 'Unknown',
@@ -882,12 +1173,16 @@ RegisterCommand('lyxguard', function(source)
 
     local security = _IssueGuardPanelActionSession(source, true)
     PanelAdmins[source] = true
-    TriggerClientEvent('lyxguard:panel:openUI', source, {
-        config = { soundEnabled = true, autoRefresh = true },
-        stats = GetPanelStats(),
-        recentEvents = GetRecentEvents(20),
-        security = security or { enabled = false }
-    })
+    GetPanelStatsAsync(function(stats)
+        GetRecentEventsAsync(20, function(recentEvents)
+            TriggerClientEvent('lyxguard:panel:openUI', source, {
+                config = { soundEnabled = true, autoRefresh = true },
+                stats = stats or {},
+                recentEvents = recentEvents or {},
+                security = security or { enabled = false }
+            })
+        end)
+    end)
 end, false)
 
 -- Cleanup on disconnect
@@ -921,20 +1216,17 @@ RegisterNetEvent('lyxguard:panel:clearAllLogs', function()
         return TriggerClientEvent('lyxguard:notify', src, 'error', 'Cooldown activo')
     end
 
-    -- Limpiar TODAS las tablas de logs
-    MySQL.query('TRUNCATE TABLE lyxguard_detections')
-    MySQL.query('TRUNCATE TABLE lyxguard_warnings')
+    MySQL.query('TRUNCATE TABLE lyxguard_detections', {}, function()
+        MySQL.query('TRUNCATE TABLE lyxguard_warnings', {}, function()
+            local adminName = GetPlayerName(src) or 'Unknown'
+            print(string.format('^3[LyxGuard]^7 %s limpi TODOS los logs', adminName))
 
-    -- Log de esta accin
-    local adminName = GetPlayerName(src) or 'Unknown'
-    print(string.format('^3[LyxGuard]^7 %s limpi TODOS los logs', adminName))
-
-    -- Notificar
-    TriggerClientEvent('lyxguard:notify', src, 'success', 'Todos los logs han sido eliminados')
-
-    -- Actualizar panel para todos los admins
-    BroadcastToPanelAdmins('refreshStats', GetPanelStats())
-    _AuditGuardAction(src, 'guard_panel_clear_all_logs', 'allowed')
+            _InvalidatePanelQueryCache()
+            TriggerClientEvent('lyxguard:notify', src, 'success', 'Todos los logs han sido eliminados')
+            BroadcastStatsRefresh()
+            _AuditGuardAction(src, 'guard_panel_clear_all_logs', 'allowed')
+        end)
+    end)
 end)
 
 -- Limpiar logs de un jugador especfico
@@ -964,17 +1256,17 @@ RegisterNetEvent('lyxguard:panel:clearPlayerLogs', function(identifier)
         return TriggerClientEvent('lyxguard:notify', src, 'error', 'Identifier invalido')
     end
 
-    -- Limpiar logs del jugador
-    MySQL.query('DELETE FROM lyxguard_detections WHERE identifier = ?', { identifier })
-    MySQL.query('DELETE FROM lyxguard_warnings WHERE identifier = ?', { identifier })
+    MySQL.query('DELETE FROM lyxguard_detections WHERE identifier = ?', { identifier }, function()
+        MySQL.query('DELETE FROM lyxguard_warnings WHERE identifier = ?', { identifier }, function()
+            local adminName = GetPlayerName(src) or 'Unknown'
+            print(string.format('^3[LyxGuard]^7 %s limpi logs de: %s', adminName, identifier))
 
-    -- Log de esta accin
-    local adminName = GetPlayerName(src) or 'Unknown'
-    print(string.format('^3[LyxGuard]^7 %s limpi logs de: %s', adminName, identifier))
-
-    TriggerClientEvent('lyxguard:notify', src, 'success', 'Logs del jugador limpiados')
-    BroadcastToPanelAdmins('refreshStats', GetPanelStats())
-    _AuditGuardAction(src, 'guard_panel_clear_player_logs', 'allowed', nil, identifier, nil)
+            _InvalidatePanelQueryCache({ identifier = identifier })
+            TriggerClientEvent('lyxguard:notify', src, 'success', 'Logs del jugador limpiados')
+            BroadcastStatsRefresh()
+            _AuditGuardAction(src, 'guard_panel_clear_player_logs', 'allowed', nil, identifier, nil)
+        end)
+    end)
 end)
 
 -- Limpiar advertencias de un jugador
@@ -1004,13 +1296,15 @@ RegisterNetEvent('lyxguard:panel:clearPlayerWarnings', function(identifier)
         return TriggerClientEvent('lyxguard:notify', src, 'error', 'Identifier invalido')
     end
 
-    MySQL.query('DELETE FROM lyxguard_warnings WHERE identifier = ?', { identifier })
+    MySQL.query('DELETE FROM lyxguard_warnings WHERE identifier = ?', { identifier }, function()
+        local adminName = GetPlayerName(src) or 'Unknown'
+        print(string.format('^3[LyxGuard]^7 %s limpi warnings de: %s', adminName, identifier))
 
-    local adminName = GetPlayerName(src) or 'Unknown'
-    print(string.format('^3[LyxGuard]^7 %s limpi warnings de: %s', adminName, identifier))
-
-    TriggerClientEvent('lyxguard:notify', src, 'success', 'Advertencias del jugador limpiadas')
-    _AuditGuardAction(src, 'guard_panel_clear_player_warnings', 'allowed', nil, identifier, nil)
+        _InvalidatePanelQueryCache({ identifier = identifier })
+        TriggerClientEvent('lyxguard:notify', src, 'success', 'Advertencias del jugador limpiadas')
+        BroadcastStatsRefresh()
+        _AuditGuardAction(src, 'guard_panel_clear_player_warnings', 'allowed', nil, identifier, nil)
+    end)
 end)
 
 -- Limpiar detecciones antiguas (mas de X dias)
@@ -1033,15 +1327,17 @@ RegisterNetEvent('lyxguard:panel:clearOldLogs', function(days)
     if days < 1 then days = 1 end
     if days > 365 then days = 365 end
 
-    MySQL.query('DELETE FROM lyxguard_detections WHERE detection_date < DATE_SUB(NOW(), INTERVAL ? DAY)', { days })
-    MySQL.query('DELETE FROM lyxguard_warnings WHERE warn_date < DATE_SUB(NOW(), INTERVAL ? DAY)', { days })
+    MySQL.query('DELETE FROM lyxguard_detections WHERE detection_date < DATE_SUB(NOW(), INTERVAL ? DAY)', { days }, function()
+        MySQL.query('DELETE FROM lyxguard_warnings WHERE warn_date < DATE_SUB(NOW(), INTERVAL ? DAY)', { days }, function()
+            local adminName = GetPlayerName(src) or 'Unknown'
+            print(string.format('^3[LyxGuard]^7 %s limpi logs de mas de %d dias', adminName, days))
 
-    local adminName = GetPlayerName(src) or 'Unknown'
-    print(string.format('^3[LyxGuard]^7 %s limpi logs de mas de %d dias', adminName, days))
-
-    TriggerClientEvent('lyxguard:notify', src, 'success', string.format('Logs de mas de %d dias limpiados', days))
-    BroadcastToPanelAdmins('refreshStats', GetPanelStats())
-    _AuditGuardAction(src, 'guard_panel_clear_old_logs', 'allowed', nil, nil, nil, { days = days })
+            _InvalidatePanelQueryCache()
+            TriggerClientEvent('lyxguard:notify', src, 'success', string.format('Logs de mas de %d dias limpiados', days))
+            BroadcastStatsRefresh()
+            _AuditGuardAction(src, 'guard_panel_clear_old_logs', 'allowed', nil, nil, nil, { days = days })
+        end)
+    end)
 end)
 
 -- Borrar una deteccion especifica por ID
@@ -1073,8 +1369,9 @@ RegisterNetEvent('lyxguard:panel:clearDetection', function(detectionId)
 
     MySQL.query('DELETE FROM lyxguard_detections WHERE id = ?', { detectionId }, function(result)
         if result and result.affectedRows and result.affectedRows > 0 then
+            _InvalidatePanelQueryCache()
             TriggerClientEvent('lyxguard:notify', src, 'success', 'Deteccion #' .. detectionId .. ' eliminada')
-            BroadcastToPanelAdmins('refreshStats', GetPanelStats())
+            BroadcastStatsRefresh()
             _AuditGuardAction(src, 'guard_panel_clear_detection', 'allowed', nil, tostring(detectionId),
                 'DetectionID:' .. tostring(detectionId))
         else

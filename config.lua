@@ -293,6 +293,8 @@ Config.Risk = {
 
     -- Umbrales (puntos acumulados)
     thresholds = {
+        notify = 20,
+        staffAlert = 60,
         kick = 80,
         tempBan = 140,
         permBan = 220,
@@ -301,6 +303,7 @@ Config.Risk = {
 
     -- Cooldown entre sanciones por risk score (ms)
     actionCooldownMs = 60 * 1000,
+    alertCooldownMs = 45 * 1000,
 
     -- Puntos por senal (MarkPlayerSuspicious reason)
     points = {
@@ -337,9 +340,32 @@ Config.Risk = {
         restricted_event_spoof_high = 240,
         honeypot_command = 260,
         burst_pattern = 45,
+        explosion_event = 20,
+        ptfx_event = 15,
+        clear_ped_tasks_event = 20,
+        projectile_event = 25,
+        weapon_damage_event = 25,
+        entity_removed_burst = 20,
+        anti_yank = 15,
+        blacklisted_weapon_server = 40,
+        health_hack_server = 35,
+        armor_hack_server = 25,
+        infinite_ammo_server = 35,
+        give_weapon = 45,
     },
 
-    defaultPoints = 10
+    defaultPoints = 10,
+
+    -- Optional persistence for risk profiles between restarts.
+    -- Disabled by default to preserve legacy behavior until staging validation is complete.
+    persistence = {
+        enabled = false,
+        flushIntervalMs = 30000,
+        loadLimit = 2000,
+        recentSignalsLimit = 5,
+        minScoreToPersist = 1,
+        pruneOlderThanDays = 30
+    }
 }
 -- -----------------------------------------------------------------------------
 -- BURST PATTERN DETECTION
@@ -1543,7 +1569,8 @@ Config.Entities = {
         enabled = false,
         punishment = 'notify',
         tolerance = 1,
-        maxPerMinute = 60
+        maxPerMinute = 60,
+        blacklistedEffects = {}
     },
 
     -- Server-side clearPedTasksEvent spam protection (can be used to troll/interrupt players).
@@ -1552,6 +1579,52 @@ Config.Entities = {
         punishment = 'warn',
         tolerance = 2,
         maxPerMinute = 30
+    },
+
+    -- Server-side projectile monitoring using OneSync startProjectileEvent.
+    -- Keeps a conservative budget and blocks obvious explosive abuse.
+    projectile = {
+        enabled = true,
+        punishment = 'warn',
+        banDuration = 'medium',
+        tolerance = 2,
+        windowMs = 10000,
+        maxPerWindow = 8,
+        maxSingleBulletPerWindow = 3,
+        cancelOnViolation = true,
+        blacklistedWeapons = {
+            'WEAPON_RPG',
+            'WEAPON_HOMINGLAUNCHER',
+            'WEAPON_GRENADELAUNCHER',
+            'WEAPON_GRENADELAUNCHER_SMOKE',
+            'WEAPON_COMPACTLAUNCHER',
+            'WEAPON_RAILGUN'
+        },
+        blacklistedProjectiles = {}
+    },
+
+    -- Server-side weaponDamageEvent validation.
+    -- Focuses on impossible override damage / multi-hit abuse, not normal combat tuning.
+    weaponDamage = {
+        enabled = true,
+        punishment = 'warn',
+        banDuration = 'medium',
+        tolerance = 2,
+        windowMs = 5000,
+        maxEventsPerWindow = 60,
+        maxDamage = 250,
+        maxHitGlobalIds = 4,
+        cancelOnViolation = true
+    },
+
+    -- entityRemoved has no direct sender metadata, so this is intentionally
+    -- telemetry-oriented and only flags extreme entity churn tied to tracked owners.
+    entityRemoved = {
+        enabled = true,
+        punishment = 'notify',
+        tolerance = 3,
+        windowMs = 10000,
+        maxPerWindow = 80
     },
 -- -----------------------------------------------------------------------------
     -- ANTI-YANK FROM VEHICLE (Player Protection)

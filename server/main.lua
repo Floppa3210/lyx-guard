@@ -745,10 +745,13 @@ end
 
 function GetPlayerWarnings(identifier)
     if not identifier then return {} end
-    return MySQL.Sync.fetchAll(
-        'SELECT * FROM lyxguard_warnings WHERE identifier = ? AND active = 1 ORDER BY warn_date DESC',
-        { identifier }
-    ) or {}
+    if MySQL and MySQL.query and MySQL.query.await then
+        return MySQL.query.await(
+            'SELECT * FROM lyxguard_warnings WHERE identifier = ? AND active = 1 ORDER BY warn_date DESC',
+            { identifier }
+        ) or {}
+    end
+    return {}
 end
 
 -- Make available to other server scripts

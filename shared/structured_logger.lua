@@ -36,6 +36,32 @@ local LOG_LEVELS = {
 local logBuffer = {}
 local maxBufferSize = 100
 
+local function _IsValidDiscordWebhookUrl(url)
+    if type(url) ~= 'string' then
+        return false
+    end
+
+    url = url:match('^%s*(.-)%s*$') or ''
+    if url == '' then
+        return false
+    end
+
+    return (string.match(url, '^https://discord%.com/api/webhooks/') ~= nil) or
+        (string.match(url, '^https://discordapp%.com/api/webhooks/') ~= nil)
+end
+
+local function _ResolveConfiguredDiscordWebhook()
+    if Config and Config.Discord and Config.Discord.webhooks and Config.Discord.webhooks.detections then
+        return Config.Discord.webhooks.detections
+    end
+
+    if Config and Config.DiscordWebhooks and Config.DiscordWebhooks.detections then
+        return Config.DiscordWebhooks.detections
+    end
+
+    return nil
+end
+
 -- ═══════════════════════════════════════════════════════════════════════════════
 -- INITIALIZATION
 -- ═══════════════════════════════════════════════════════════════════════════════
@@ -47,9 +73,11 @@ function StructuredLogger.Init(config)
         end
     end
 
-    -- Get webhook from main config if available
-    if Config and Config.DiscordWebhooks and Config.DiscordWebhooks.detections then
-        LoggerConfig.discordWebhook = Config.DiscordWebhooks.detections
+    -- Get webhook from main config if available. Prefer the current project layout,
+    -- but keep compatibility with older Config.DiscordWebhooks.* deployments.
+    local configuredWebhook = _ResolveConfiguredDiscordWebhook()
+    if configuredWebhook then
+        LoggerConfig.discordWebhook = configuredWebhook
     end
 
     print('^5[LyxGuard Logger]^7 Initialized with level: ' .. LoggerConfig.minLevel)
@@ -89,7 +117,7 @@ function StructuredLogger.Log(level, module, data)
     print(prefix .. '[LyxGuard ' .. level .. ']^7 [' .. module .. '] ' .. (data.message or json.encode(data)))
 
     -- Send to Discord if enabled and level is WARN or higher
-    if LoggerConfig.sendToDiscord and levelNum >= 3 and LoggerConfig.discordWebhook then
+    if LoggerConfig.sendToDiscord and levelNum >= 3 and _IsValidDiscordWebhookUrl(LoggerConfig.discordWebhook) then
         StructuredLogger.SendToDiscord(log)
     end
 
@@ -184,7 +212,13 @@ end
 -- ═══════════════════════════════════════════════════════════════════════════════
 
 function StructuredLogger.SendToDiscord(log)
-    if not LoggerConfig.discordWebhook or LoggerConfig.discordWebhook == '' then return end
+    local webhookUrl = tostring(LoggerConfig.discordWebhook or ''):match('^%s*(.-)%s*$') or ''
+    if not _IsValidDiscordWebhookUrl(webhookUrl) then
+        if webhookUrl ~= '' then
+            print('^3[LyxGuard Logger]^7 Invalid Discord webhook URL, skipping send')
+        end
+        return
+    end
 
     local color = LoggerConfig.discordColors[log.level] or 3447003
 
@@ -254,7 +288,7 @@ function StructuredLogger.SendToDiscord(log)
         embeds = { embed }
     }
 
-    PerformHttpRequest(LoggerConfig.discordWebhook, function(statusCode, text, headers)
+    PerformHttpRequest(webhookUrl, function(statusCode, text, headers)
         if statusCode ~= 200 and statusCode ~= 204 then
             print('^1[LyxGuard Logger]^7 Discord webhook failed: ' .. tostring(statusCode))
         end

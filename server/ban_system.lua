@@ -27,6 +27,15 @@ local function _GetHardeningCfg()
     }
 end
 
+local function _CanAwaitQuery()
+    return MySQL and MySQL.query and MySQL.query.await
+end
+
+local function _AwaitQuery(query, params)
+    if not _CanAwaitQuery() then return nil end
+    return MySQL.query.await(query, params or {})
+end
+
 local function _HashFNV1a(value)
     value = tostring(value or '')
     local hash = _FNV32_OFFSET
@@ -297,7 +306,7 @@ function BanSystem.GetCachedPlayer(search)
     end
     
     -- Check database
-    local result = MySQL.Sync.fetchAll([[
+    local result = _AwaitQuery([[
         SELECT * FROM lyxguard_player_cache 
         WHERE player_name LIKE ? OR identifier LIKE ? OR license LIKE ? OR steam LIKE ?
         ORDER BY last_seen DESC LIMIT 1
@@ -333,7 +342,7 @@ end
 function BanSystem.GetAllCachedPlayers(limit)
     limit = limit or 100
     
-    local result = MySQL.Sync.fetchAll([[
+    local result = _AwaitQuery([[
         SELECT * FROM lyxguard_player_cache 
         ORDER BY last_seen DESC LIMIT ?
     ]], { limit })
@@ -559,7 +568,7 @@ function BanSystem.CheckPlayerBan(source)
     end
     
     -- Check by direct identifiers + fingerprint
-    local result = MySQL.Sync.fetchAll([[
+    local result = _AwaitQuery([[
         SELECT * FROM lyxguard_bans 
         WHERE active = 1 AND (
             identifier = ? OR license = ? OR steam = ? OR discord = ? OR fivem = ?
@@ -594,7 +603,7 @@ function BanSystem.CheckPlayerBan(source)
 
         -- MySQL 8+ fast path
         local overlapsOk = pcall(function()
-            tokenResult = MySQL.Sync.fetchAll([[
+            tokenResult = _AwaitQuery([[
                 SELECT * FROM lyxguard_bans
                 WHERE active = 1 AND token_hashes IS NOT NULL
                   AND JSON_OVERLAPS(token_hashes, CAST(? AS JSON))
@@ -622,7 +631,7 @@ function BanSystem.CheckPlayerBan(source)
         end
 
         -- Fallback for MariaDB / MySQL variants without JSON_OVERLAPS.
-        local hashRows = MySQL.Sync.fetchAll([[
+        local hashRows = _AwaitQuery([[
             SELECT * FROM lyxguard_bans
             WHERE active = 1 AND token_hashes IS NOT NULL
             ORDER BY id DESC
@@ -649,7 +658,7 @@ function BanSystem.CheckPlayerBan(source)
     -- Legacy fallback: raw token LIKE for pre-v2 bans (kept for backwards compatibility).
     if hardening.legacyTokenLikeFallback and #tokens > 0 then
         for _, token in ipairs(tokens) do
-            local tokenResult = MySQL.Sync.fetchAll([[
+            local tokenResult = _AwaitQuery([[
                 SELECT * FROM lyxguard_bans 
                 WHERE active = 1 AND tokens LIKE ?
                 ORDER BY id DESC
