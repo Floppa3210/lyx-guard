@@ -30,7 +30,22 @@ Locales = {
         injection = 'Inyección de código detectada',
         afkfarming = 'AFK farming detectado',
         resourcevalidation = 'Recursos inválidos detectados',
-        honeypot_event = 'Evento trampa detectado'
+        honeypot_event = 'Evento trampa detectado',
+        -- PL-Protect parity / detecciones unificadas (v4.3)
+        aimbot = 'Aimbot detectado',
+        aimbot_ultra = 'Aimbot (ultra) detectado',
+        magic_bullet = 'Bala mágica detectada',
+        norecoil = 'Sin retroceso detectado',
+        no_recoil = 'Sin retroceso detectado',
+        no_props = 'No-props (props ocultas) detectado',
+        magneto = 'Magneto (imán de entidades) detectado',
+        vehicle_invisible = 'Vehículo invisible detectado',
+        anti_taser = 'Abuso de tazer detectado',
+        damage_modifier = 'Daño modificado detectado',
+        citizen_exploit = 'Exploit de citizen/recurso detectado',
+        god_mode = 'Modo dios detectado',
+        infinite_ammo = 'Munición infinita detectada',
+        infinite_stamina = 'Estamina infinita detectada'
     },
     en = {
         teleport = 'Teleport detected',
@@ -54,7 +69,22 @@ Locales = {
         injection = 'Code injection detected',
         afkfarming = 'AFK farming detected',
         resourcevalidation = 'Invalid resources detected',
-        honeypot_event = 'Honeypot event detected'
+        honeypot_event = 'Honeypot event detected',
+        -- PL-Protect parity / unified detections (v4.3)
+        aimbot = 'Aimbot detected',
+        aimbot_ultra = 'Aimbot (ultra) detected',
+        magic_bullet = 'Magic bullet detected',
+        norecoil = 'No recoil detected',
+        no_recoil = 'No recoil detected',
+        no_props = 'No-props (hidden props) detected',
+        magneto = 'Magneto (entity magnet) detected',
+        vehicle_invisible = 'Invisible vehicle detected',
+        anti_taser = 'Tazer abuse detected',
+        damage_modifier = 'Damage modifier detected',
+        citizen_exploit = 'Citizen/resource exploit detected',
+        god_mode = 'God mode detected',
+        infinite_ammo = 'Infinite ammo detected',
+        infinite_stamina = 'Infinite stamina detected'
     }
 }
 

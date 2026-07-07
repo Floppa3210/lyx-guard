@@ -108,9 +108,11 @@ RegisterDetection('vehiclegodmode', {
     
     -- Si recibió mucho daño pero el vehículo sigue perfecto
     if state.data.damageReceived > config.damageThreshold then
+        -- Capturar antes de resetear (evidencia real, no 0).
+        local damageReached = state.data.damageReceived
         if health >= state.data.lastHealth - 100 then
             state.data.damageReceived = 0
-            return true, {damageReceived = state.data.damageReceived}
+            return true, { damageReceived = damageReached, threshold = config.damageThreshold }
         end
         state.data.damageReceived = 0
     end

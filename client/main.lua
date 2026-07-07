@@ -69,6 +69,7 @@ function InitializeAntiCheat()
             { source = cfg.movement,   prefix = '' },
             { source = cfg.combat,     prefix = '' },
             { source = cfg.entities,   prefix = '' },
+            { source = cfg.ultra,      prefix = '' },
             { source = cfg.advanced,   prefix = '' },
             { source = cfg.blacklists, prefix = 'blacklist_' }
         }
@@ -446,15 +447,27 @@ exports('GetDetectionCount', function()
     return count
 end)
 
--- 
+--
 -- DUAL-LAYER PROTECTION: CLIENT -> SERVER SYNC
 -- Enva datos al servidor para verificacin adicional
--- 
+--
 
 local SyncData = {
     shotsFired = 0,
     lastWeapon = 0
 }
+
+-- Envia un evento de sync usando el Secure Bridge (HMAC + nonce) cuando esta
+-- disponible; si el bridge aun no emitio key, cae a TriggerServerEvent plano
+-- (el servidor valida rangos igual). Esto anade autenticidad a los syncs sin
+-- romper compatibilidad.
+local function _SecureSync(eventName, ...)
+    if type(LyxTriggerSecureServerEvent) == 'function' then
+        LyxTriggerSecureServerEvent(eventName, ...)
+    else
+        TriggerServerEvent(eventName, ...)
+    end
+end
 
 -- Contar disparos para sincronizacin (v4.2: Optimizado de Wait(0) a Wait(50))
 CreateThread(function()
@@ -480,8 +493,8 @@ RegisterNetEvent('lyxguard:requestSync', function()
         SyncData.lastWeapon = weapon
     end
 
-    -- Enviar datos al servidor para verificacin
-    TriggerServerEvent('lyxguard:sync:playerData', {
+    -- Enviar datos al servidor para verificacin (firmado via secure bridge)
+    _SecureSync('lyxguard:sync:playerData', {
         health = GetEntityHealth(ped),
         armor = GetPedArmour(ped),
         weaponHash = weapon,
@@ -509,7 +522,7 @@ RegisterNetEvent('lyxguard:requestSync', function()
     end
 
     if #weapons > 0 then
-        TriggerServerEvent('lyxguard:sync:weapons', weapons)
+        _SecureSync('lyxguard:sync:weapons', weapons)
     end
 end)
 
@@ -524,7 +537,7 @@ CreateThread(function()
             local ped = PlayerPedId()
             local _, weapon = GetCurrentPedWeapon(ped, true)
 
-            TriggerServerEvent('lyxguard:sync:playerData', {
+            _SecureSync('lyxguard:sync:playerData', {
                 health = GetEntityHealth(ped),
                 armor = GetPedArmour(ped),
                 weaponHash = weapon,

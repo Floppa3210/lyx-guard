@@ -6,29 +6,12 @@
 
 -- ═══════════════════════════════════════════════════════════════════════════════
 -- 1. ANTI-RESOURCE INJECTOR
--- Detecta cuando se inyectan recursos no autorizados
+-- (unificado) La deteccion 'resource_injection' vive en
+-- client/detections/injection.lua (event-driven onClientResourceStart/Stop +
+-- autorizacion del servidor). Se elimino el registro duplicado que existia aqui.
+-- La lista de ejecutores por nombre se cubre en 'injection' (advanced.lua) y
+-- 'citizen_exploit' (ultra.lua).
 -- ═══════════════════════════════════════════════════════════════════════════════
-
-RegisterDetection('resource_injection', {
-    enabled = true,
-    punishment = 'ban_perm',
-    checkInterval = 5000,
-    tolerance = 1
-}, function(config, state)
-    -- Verificar ejecutores comunes
-    local badExecutors = {
-        'meow', 'owl', 'lunar', 'skid', 'redengine', 'eulen',
-        'hammafia', 'desudo', 'brutan', 'dopamine', 'kitsune'
-    }
-
-    for _, executor in ipairs(badExecutors) do
-        if GetResourceState(executor) == 'started' then
-            return true, { executor = executor }
-        end
-    end
-
-    return false
-end)
 
 -- ═══════════════════════════════════════════════════════════════════════════════
 -- 2. ANTI-INVISIBLE (God Mode con invisibilidad)
@@ -55,26 +38,10 @@ end)
 
 -- ═══════════════════════════════════════════════════════════════════════════════
 -- 3. ANTI-SUPER JUMP
+-- (unificado) La deteccion 'super_jump'/'superjump' vive en
+-- client/detections/misc.lua ('superjump', con height+velocidad-Z+guards).
+-- Se elimino el registro duplicado que existia aqui.
 -- ═══════════════════════════════════════════════════════════════════════════════
-
-RegisterDetection('super_jump', {
-    enabled = true,
-    punishment = 'warn',
-    maxJumpHeight = 8.0,
-    checkInterval = 100,
-    tolerance = 3
-}, function(config, state)
-    local ped = PlayerPedId()
-
-    if IsPedJumping(ped) then
-        local velZ = GetEntityVelocity(ped).z
-        if velZ > config.maxJumpHeight then
-            return true, { jumpVelocity = velZ }
-        end
-    end
-
-    return false
-end)
 
 -- ═══════════════════════════════════════════════════════════════════════════════
 -- 4. ANTI-PED CHANGE (Cambiar el modelo a algo ilegal)
@@ -118,39 +85,10 @@ end)
 
 -- ═══════════════════════════════════════════════════════════════════════════════
 -- 5. ANTI-EXPLOSION SPAM
+-- (unificado) La deteccion 'explosion_spam' vive en client/detections/spam.lua
+-- (hook real de 'explosionEvent'). El registro duplicado (que ya estaba
+-- deshabilitado por usar IsExplosionInSphere) se elimino de aqui.
 -- ═══════════════════════════════════════════════════════════════════════════════
-
-local explosionCount = 0
-local lastExplosionReset = 0
-
-RegisterDetection('explosion_spam', {
-    enabled = false, -- v4.2 FIX: DISABLED - Duplicate of spam.lua, this version uses IsExplosionInSphere which detects ALL explosions (including environmental) not player-caused ones
-    punishment = 'kick',
-    maxExplosions = 5,
-    timeWindow = 5000,
-    checkInterval = 500,
-    tolerance = 1
-}, function(config, state)
-    local now = GetGameTimer()
-
-    -- Reset counter periodically
-    if now - lastExplosionReset > config.timeWindow then
-        explosionCount = 0
-        lastExplosionReset = now
-    end
-
-    -- Check for explosion near player
-    local coords = GetEntityCoords(PlayerPedId())
-    if IsExplosionInSphere(-1, coords.x, coords.y, coords.z, 50.0) then
-        explosionCount = explosionCount + 1
-
-        if explosionCount > config.maxExplosions then
-            return true, { explosions = explosionCount }
-        end
-    end
-
-    return false
-end)
 
 -- ═══════════════════════════════════════════════════════════════════════════════
 -- 6. ANTI-VEHICLE SPAWN SPAM

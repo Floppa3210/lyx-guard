@@ -52,9 +52,7 @@ server_scripts {
 client_scripts {
     'client/core.lua',
     'client/secure_bridge.lua',
-    'client/protection_loader.lua',
     'client/protections/*.lua',
-    'client/protection_registrar.lua',
     'client/detections/*.lua',
     'client/panel.lua',
     'client/main.lua'

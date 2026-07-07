@@ -321,26 +321,10 @@ end)
 
 -- ═══════════════════════════════════════════════════════════════════════════════
 -- 4. ANTI-SUPERJUMP
+-- (unificado) La deteccion 'superjump' ahora vive en client/detections/misc.lua,
+-- que usa height-above-ground + velocidad-Z + guards (mejor implementacion).
+-- Se elimino el registro duplicado que existia aqui para evitar doble ejecucion.
 -- ═══════════════════════════════════════════════════════════════════════════════
-
-RegisterDetection('superjump', {
-    enabled = true,
-    punishment = 'teleport',
-    banDuration = 'short',
-    tolerance = 3,
-    maxJumpVelocity = 8.0
-}, function(config, state)
-    local ped = PlayerPedId()
-
-    if IsPedJumping(ped) then
-        local velZ = GetEntityVelocity(ped).z
-        if velZ > config.maxJumpVelocity then
-            return true, { velocityZ = velZ }
-        end
-    end
-
-    return false
-end)
 
 -- ═══════════════════════════════════════════════════════════════════════════════
 -- 5. ANTI-FLYHACK
@@ -363,9 +347,11 @@ RegisterDetection('flyhack', {
     if not onGround and not inVehicle and not hasParachute then
         state.data.airTime = state.data.airTime + 100
         if state.data.airTime > config.maxAirTime then
-            local result = true
+            -- Capturar el valor ANTES de resetear (si no, la evidencia enviada al
+            -- servidor siempre seria 0).
+            local airTimeReached = state.data.airTime
             state.data.airTime = 0
-            return result, { airTime = state.data.airTime }
+            return true, { airTime = airTimeReached, maxAirTime = config.maxAirTime }
         end
     else
         state.data.airTime = 0

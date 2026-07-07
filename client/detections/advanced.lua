@@ -129,73 +129,12 @@ RegisterDetection('resourcevalidation', {
 end)
 
 -- ═══════════════════════════════════════════════════════════════════════════════
--- 5. AIMBOT DETECTION (Suspicious Aim Speed)
+-- 5. AIMBOT DETECTION
+-- (unificado) La deteccion 'aimbot' vive en client/detections/combat_advanced.lua
+-- (analisis de snap-angle sobre historial de camara). Se elimino el registro
+-- duplicado que existia aqui para evitar doble ejecucion del mismo nombre.
+-- Nota: 'aimbot_ultra' (ultra.lua) es un nombre distinto y se conserva.
 -- ═══════════════════════════════════════════════════════════════════════════════
-
-RegisterDetection('aimbot', {
-    enabled = true,
-    punishment = 'notify',
-    tolerance = 15,               -- v4.2 FIX: Increased from 10 to reduce false positives
-    minAimSpeedThreshold = 600.0, -- v4.2 FIX: Increased from 500 to 600 degrees/sec
-    checkInterval = 100,
-    consecutiveSnapCount = 10     -- v4.2 FIX: Increased from 8 to 10 consecutive snaps
-}, function(config, state)
-    state.data.lastAim = state.data.lastAim or { pitch = 0, heading = 0, time = GetGameTimer() }
-    state.data.snapCount = state.data.snapCount or 0
-    state.data.lastCheck = state.data.lastCheck or GetGameTimer()
-
-    local now = GetGameTimer()
-    if now - state.data.lastCheck < config.checkInterval then
-        return false
-    end
-    state.data.lastCheck = now
-
-    local ped = PlayerPedId()
-    
-    -- Only check aimbot when player is actually aiming or shooting
-    local isAiming = IsPlayerFreeAiming(PlayerId()) or IsPedShooting(ped)
-    if not isAiming then
-        state.data.snapCount = 0
-        state.data.lastAim = { pitch = GetGameplayCamRelativePitch(), heading = GetGameplayCamRelativeHeading(), time = now }
-        return false
-    end
-    
-    local currentPitch = GetGameplayCamRelativePitch()
-    local currentHeading = GetGameplayCamRelativeHeading()
-
-    local dt = (now - state.data.lastAim.time) / 1000.0
-    if dt > 0 and dt < 1.0 then -- Only consider if within 1 second (avoid resume after pause)
-        local pitchDiff = math.abs(currentPitch - state.data.lastAim.pitch)
-        local headingDiff = math.abs(currentHeading - state.data.lastAim.heading)
-
-        -- Normalize heading difference (can wrap around)
-        if headingDiff > 180 then headingDiff = 360 - headingDiff end
-
-        local totalSpeed = (pitchDiff + headingDiff) / dt
-
-        -- Require very high speed AND player is aiming at someone
-        local _, targetEntity = GetEntityPlayerIsFreeAimingAt(PlayerId())
-        local hasTarget = targetEntity and DoesEntityExist(targetEntity)
-        
-        if totalSpeed > config.minAimSpeedThreshold and hasTarget then
-            state.data.snapCount = state.data.snapCount + 1
-
-            if state.data.snapCount >= config.consecutiveSnapCount then
-                state.data.snapCount = 0
-                return true, {
-                    aimSpeed = math.floor(totalSpeed),
-                    threshold = config.minAimSpeedThreshold,
-                    snapCount = config.consecutiveSnapCount
-                }
-            end
-        else
-            state.data.snapCount = math.max(0, state.data.snapCount - 0.5) -- Slower decay
-        end
-    end
-
-    state.data.lastAim = { pitch = currentPitch, heading = currentHeading, time = now }
-    return false
-end)
 
 -- ═══════════════════════════════════════════════════════════════════════════════
 -- 6. SPECTATE/FREECAM DETECTION
@@ -239,38 +178,10 @@ end)
 
 -- ═══════════════════════════════════════════════════════════════════════════════
 -- 7. INVISIBILITY DETECTION
+-- (unificado) La deteccion 'invisibility' se consolido en
+-- client/detections/player_state.lua ('invisible', con checks de alpha/physics).
+-- Se elimino el registro duplicado que existia aqui.
 -- ═══════════════════════════════════════════════════════════════════════════════
-
-RegisterDetection('invisibility', {
-    enabled = true,
-    punishment = 'warn',
-    tolerance = 2,
-    checkInterval = 5000
-}, function(config, state)
-    state.data.lastCheck = state.data.lastCheck or 0
-
-    local now = GetGameTimer()
-    if now - state.data.lastCheck < config.checkInterval then
-        return false
-    end
-    state.data.lastCheck = now
-
-    local ped = PlayerPedId()
-
-    -- Check for invisibility flags
-    if not IsEntityVisible(ped) then
-        -- Admin might be using legit invisibility - this is handled by immunity
-        return true, { visible = false }
-    end
-
-    -- Check if player is locally invisible to self (some hacks do this)
-    local alpha = GetEntityAlpha(ped)
-    if alpha < 200 and alpha > 0 then
-        return true, { alpha = alpha }
-    end
-
-    return false
-end)
 
 -- ═══════════════════════════════════════════════════════════════════════════════
 -- 8. TASK/ANIMATION EXPLOIT DETECTION

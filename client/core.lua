@@ -489,6 +489,20 @@ function RegisterProtectionModule(name, protection)
     return true
 end
 
+-- Compatibilidad: exports que antes proveia client/protection_loader.lua (retirado
+-- en la unificacion v4.3). Ahora todo pasa por el unico registro/loop del core.
+exports('RegisterProtection', function(name, protection)
+    return RegisterProtectionModule(name, protection)
+end)
+exports('GetProtection', function(name)
+    return ProtectionModules[name]
+end)
+exports('SetProtectionEnabled', function(name, enabled)
+    if ProtectionModules[name] then
+        ProtectionModules[name].Enabled = enabled
+    end
+end)
+
 ---Run all protection modules (called from main loop)
 function RunProtectionModules()
     if PlayerState.immune or PlayerState.inGracePeriod then return end

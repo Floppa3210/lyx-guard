@@ -156,33 +156,45 @@ RegisterDetection('executor_detection', {
     -- Skip if immune
     if Helpers and Helpers.IsPlayerImmune and Helpers.IsPlayerImmune() then return false end
 
-    -- Check for known executor traces
-    local executorIndicators = 0
-
-    -- Check 1: Suspicious global functions (injected by executors)
-    local suspiciousFunctions = {
-        'ExecuteCommand', -- Not normally exposed
-        'TriggerServerEventInternal',
-        'RegisterNUICallback',
-        '__cfx_export',
+    -- Check 1: Globales sospechosas inyectadas por ejecutores.
+    -- Muchos executors/menus filtran nombres globales conocidos en _G. Un cliente
+    -- limpio no expone estos identificadores en el runtime de este recurso.
+    local suspiciousGlobals = config.suspiciousGlobals or {
+        'menu_loaded', 'lynx_loaded', 'eulen', 'redengine', 'brutan',
+        'oui_menu', 'susano', 'nachos', 'lambda_menu_loaded',
+        '__executor', '__inject', 'cheat_loaded', 'trainer_loaded'
     }
+    for _, gname in ipairs(suspiciousGlobals) do
+        if rawget(_G, gname) ~= nil then
+            return true, {
+                type = 'executor_global',
+                global = gname
+            }
+        end
+    end
 
-    -- Check 2: Count unexpected resources
+    -- Check 2: Recursos inesperados (no presentes en el snapshot inicial autorizado).
+    -- Se compara contra loadedResources capturado tras el grace period.
     local numResources = GetNumResources()
     local unexpectedResources = 0
+    local unexpectedNames = {}
 
     for i = 0, numResources - 1 do
         local resourceName = GetResourceByFindIndex(i)
         if resourceName and not ProtectionState.loadedResources[resourceName] then
             unexpectedResources = unexpectedResources + 1
+            if #unexpectedNames < 5 then
+                unexpectedNames[#unexpectedNames + 1] = resourceName
+            end
         end
     end
 
-    -- If we find multiple unexpected resources, flag
+    -- Umbral conservador para evitar falsos positivos por streaming tardio de recursos.
     if unexpectedResources > 3 then
         return true, {
             type = 'unexpected_resources',
-            count = unexpectedResources
+            count = unexpectedResources,
+            samples = unexpectedNames
         }
     end
 

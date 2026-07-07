@@ -1402,6 +1402,16 @@ Config.Combat = {
         tolerance = 1,
         maxExplosionsPerSecond = 2,
         trackingWindow = 3000
+    },
+
+    -- ANTI-TASER (client-side): abuso de tazer (descarga mas rapida que el
+    -- cooldown fisico del arma). Logica en client/detections/anti_taser.lua.
+    antiTaser = {
+        enabled = true,
+        punishment = 'warn',
+        banDuration = 'short',
+        tolerance = 3,
+        minShotIntervalMs = 3000
     }
 }
 -- -----------------------------------------------------------------------------
@@ -1734,6 +1744,31 @@ Config.Entities = {
         punishment = 'warn',
         banDuration = 'medium',
         tolerance = 3
+    },
+-- -----------------------------------------------------------------------------
+    -- NO-PROPS (client-side): cheat que oculta masivamente props del mundo.
+    -- La logica corre en cliente (client/detections/misc.lua). Aqui se define el
+    -- castigo server + parametros de escaneo tuneables.
+-- -----------------------------------------------------------------------------
+    noProps = {
+        enabled = true,
+        punishment = 'warn',
+        banDuration = 'medium',
+        tolerance = 2,
+        scanRadius = 25.0,
+        maxHiddenObjects = 12,
+        hiddenAlphaThreshold = 30
+    },
+-- -----------------------------------------------------------------------------
+    -- VEHICULO INVISIBLE (client-side): cheat que oculta el vehiculo conducido.
+    -- Logica en client/detections/player_state.lua.
+-- -----------------------------------------------------------------------------
+    vehicleInvisible = {
+        enabled = true,
+        punishment = 'warn',
+        banDuration = 'medium',
+        tolerance = 3,
+        minAlpha = 50
     }
 }
 -- -----------------------------------------------------------------------------

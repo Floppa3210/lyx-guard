@@ -580,7 +580,14 @@ end)
 -- ═══════════════════════════════════════════════════════════════════════════════
 
 RegisterDetection('money_exploit', {
-    enabled = true,
+    -- DESHABILITADA por defecto (v4.3): el dinero en cliente es
+    -- authoritative-unsafe (un cheater controla el valor local o simplemente no
+    -- lo refleja), por lo que esta deteccion es trivialmente evadible y puede dar
+    -- falsos positivos con transacciones legitimas grandes. La autoridad economica
+    -- real es SERVER-SIDE via Config.ServerAnomaly.economy (server/detections.lua),
+    -- que compara deltas de money/bank/black en el backend. Se deja registrada y
+    -- desactivada; habilitar solo como senal debil complementaria si se desea.
+    enabled = false,
     punishment = 'ban_temp',
     banDuration = 'long',
     tolerance = 1,

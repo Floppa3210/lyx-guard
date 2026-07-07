@@ -34,6 +34,19 @@ local config = nil
 -- Callback for detections
 Protection.OnDetection = nil
 
+-- Helper function to get ped's seat index (local: evita contaminar el namespace global)
+local function GetPedSeatIndex(ped)
+    local vehicle = GetVehiclePedIsIn(ped, false)
+    if vehicle == 0 then return nil end
+
+    for i = -1, GetVehicleMaxNumberOfPassengers(vehicle) - 1 do
+        if GetPedInVehicleSeat(vehicle, i) == ped then
+            return i
+        end
+    end
+    return nil
+end
+
 -- Main check function
 function Protection.Run()
     if not Protection.Enabled then return end
@@ -116,19 +129,6 @@ function Protection.Run()
         lastVehicle = nil
         lastSeat = nil
     end
-end
-
--- Helper function to get ped's seat index
-function GetPedSeatIndex(ped)
-    local vehicle = GetVehiclePedIsIn(ped, false)
-    if vehicle == 0 then return nil end
-    
-    for i = -1, GetVehicleMaxNumberOfPassengers(vehicle) - 1 do
-        if GetPedInVehicleSeat(vehicle, i) == ped then
-            return i
-        end
-    end
-    return nil
 end
 
 -- Initialize

@@ -94,7 +94,14 @@ end)
 -- ═══════════════════════════════════════════════════════════════════════════════
 
 RegisterDetection('no_recoil', {
-    enabled = true,
+    -- DESHABILITADA (v4.3): esta variante dependia de
+    -- GetWeaponRecoilShakeAmplitude(weapon) <= 0.0, que casi nunca es verdadero
+    -- para armas reales (devuelve el shake CONFIGURADO del arma, no el efecto del
+    -- cheat) => falso negativo casi permanente. La deteccion de no-recoil real y
+    -- funcional vive en client/detections/weapons.lua ('norecoil', por delta de
+    -- pitch de camara durante rafagas). Se deja registrada pero desactivada para
+    -- no romper referencias/config; habilitar solo si se reescribe la heuristica.
+    enabled = false,
     punishment = 'ban_temp',
     banDuration = 'medium',
     tolerance = 3,

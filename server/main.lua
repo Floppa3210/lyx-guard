@@ -711,6 +711,7 @@ ESX.RegisterServerCallback('lyxguard:getConfig', function(source, cb)
         movement = Config.Movement or {},
         combat = Config.Combat or {},
         entities = Config.Entities or {},
+        ultra = Config.Ultra or {},
         blacklists = Config.Blacklists or {},
         advanced = Config.Advanced or {}
     })

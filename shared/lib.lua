@@ -21,6 +21,10 @@ LyxGuardLib.RESOURCE_NAME = GetCurrentResourceName()
 
 -- Detection type constants
 -- v4.4 HOTFIX: Added ALL detection types to prevent Invalid detection warnings
+-- v4.3 UNIFICACION: lista sincronizada 1:1 con los nombres realmente registrados
+-- por client/detections/*.lua (RegisterDetection). Cualquier deteccion cliente
+-- debe existir aqui (o como clave de Config) para pasar IsValidDetection en el
+-- servidor; de lo contrario la deteccion se descarta silenciosamente.
 LyxGuardLib.DETECTIONS = {
     -- Movement
     TELEPORT = 'teleport',
@@ -33,33 +37,88 @@ LyxGuardLib.DETECTIONS = {
     TASKTP = 'tasktp',
     -- Combat
     GODMODE = 'godmode',
+    GOD_MODE = 'god_mode',
     HEALTHHACK = 'healthhack',
     ARMORHACK = 'armorhack',
     RAPIDFIRE = 'rapidfire',
+    RAPID_FIRE = 'rapid_fire',
     INFINITEAMMO = 'infiniteammo',
+    INFINITE_AMMO = 'infinite_ammo',
+    AMMO_EXPLOIT = 'ammo_exploit',
+    AIMBOT = 'aimbot',
     AIMBOT_ULTRA = 'aimbot_ultra',
+    MAGIC_BULLET = 'magic_bullet',
+    NORECOIL = 'norecoil',
+    NO_RECOIL = 'no_recoil',
+    NOSPREAD = 'nospread',
+    FASTRELOAD = 'fastreload',
+    ONESHOOT = 'oneshoot',
+    DAMAGE_MODIFIER = 'damage_modifier',
+    WEAPONBLACKLIST = 'weaponblacklist',
+    BLACKLISTED_WEAPON = 'blacklisted_weapon',
+    WEAPON_SPAWN = 'weapon_spawn',
+    ANTI_TASER = 'anti_taser',
     -- Anti (alternative naming from other anticheats)
     ANTI_GODMODE = 'Anti-GodMode',
     ANTI_TELEPORT = 'Anti-Teleport',
+    -- Player state / visuals
+    HEALTH_REGEN = 'health_regen',
+    INFINITE_STAMINA = 'infinite_stamina',
+    INVISIBLE = 'invisible',
+    INVISIBLE_ABUSE = 'invisible_abuse',
+    INVISIBLEPLAYER = 'invisibleplayer',
+    VEHICLE_INVISIBLE = 'vehicle_invisible',
+    NO_PROPS = 'no_props',
+    MAGNETO = 'magneto',
+    VISIONMOD = 'visionmod',
+    VISION_ABUSE = 'vision_abuse',
+    NORAGDOLL = 'noragdoll',
+    RAGDOLL_DISABLED = 'ragdoll_disabled',
+    FORCED_ANIMATION = 'forced_animation',
+    INVALIDMODEL = 'invalidmodel',
+    ILLEGAL_PED = 'illegal_ped',
+    MODEL_EXPLOIT = 'model_exploit',
     -- Entities
     EXPLOSION = 'explosion',
+    EXPLOSION_SPAM = 'explosion_spam',
+    BLACKLISTED_EXPLOSION = 'blacklisted_explosion',
     CAGETRAP = 'cagetrap',
     VEHICLEGODMODE = 'vehiclegodmode',
     VEHICLE_SPAWN = 'vehicle_spawn',
+    VEHICLE_SPAWN_SPAM = 'vehicle_spawn_spam',
+    ENTITY_SPAM = 'entity_spam',
+    ENTITYSPAM = 'entityspam',
+    PARTICLESPAM = 'particlespam',
     -- Blacklists
     BLACKLIST_WEAPON = 'blacklist_weapon',
     BLACKLIST_VEHICLE = 'blacklist_vehicle',
     BLACKLIST_PED = 'blacklist_ped',
-    -- Advanced
+    -- Camera / spectate
+    FREECAM = 'freecam',
+    FREECAM_ABUSE = 'freecam_abuse',
+    SPECTATE = 'spectate',
+    SPECTATEABUSE = 'spectateabuse',
+    TASKEXPLOIT = 'taskexploit',
+    -- Economy (client signals; server is authoritative)
+    MONEY_EXPLOIT = 'money_exploit',
+    MONEYDROP = 'moneydrop',
+    CASINOEXPLOIT = 'casinoexploit',
+    JOBEXPLOIT = 'jobexploit',
+    WORLDMANIP = 'worldmanip',
+    -- Injection / tamper
     INJECTION = 'injection',
+    RESOURCE_INJECTION = 'resource_injection',
+    EXECUTOR_DETECTION = 'executor_detection',
+    DEBUGGER_DETECTION = 'debugger_detection',
+    CITIZEN_EXPLOIT = 'citizen_exploit',
+    RESOURCETAMPER = 'resourcetamper',
+    SCRIPTINJECTION = 'scriptinjection',
+    FUNCTIONHOOK = 'functionhook',
+    -- Advanced / misc
     AFKFARMING = 'afkfarming',
     RESOURCEVALIDATION = 'resourcevalidation',
     MENUDETECTION = 'menudetection',
-    -- Player State
-    RAGDOLL_DISABLED = 'ragdoll_disabled',
-    INVISIBLE_ABUSE = 'invisible_abuse',
-    INVISIBLEPLAYER = 'invisibleplayer',
-    SPECTATEABUSE = 'spectateabuse',
+    EVENTSPAM = 'eventspam',
     HONEYPOT_EVENT = 'honeypot_event'
 }
 

@@ -104,10 +104,16 @@ Framework modular: cada deteccion se registra con `RegisterDetection(name, confi
 | Eventos / honeypot | eventspam, honeypot_event, freecam, spectate/spectateabuse, taskexploit |
 | Economia | moneydrop, casinoexploit, jobexploit, money_exploit |
 | Blacklists | blacklist_weapon, blacklist_vehicle, blacklist_ped |
-| Visuales (nuevas) | **no_props**, **magneto**, **vehicle_invisible** |
+| Visuales | **no_props**, **magneto**, **vehicle_invisible** |
+| Anti-taser | **anti_taser** (abuso de descarga/cooldown de tazer) |
 
-Ademas: 14 modulos de proteccion activa en `client/protections/anti_*.lua`
-(anti_aimbot, anti_noclip, anti_godmode, anti_speed, anti_tazer, anti_weapon, anti_yank, etc.).
+Ademas: modulos de proteccion activa event-driven en `client/protections/`
+(`anti_entity` firewall de spawns, `anti_yank` proteccion anti-tiron de vehiculo).
+
+> v4.3: el client-side se unifico bajo un unico framework `RegisterDetection`.
+> Se retiraron los modulos `anti_*` duplicados/rotos (que ignoraban `Config`) y el
+> loader/registrar redundante; ahora hay un solo loop de deteccion. Detalles en
+> `CHANGELOG.md`.
 
 ### Server-side (`server/detections.lua`)
 Validacion sobre eventos nativos de gameplay (el servidor es la autoridad, no el cliente):
@@ -200,10 +206,10 @@ lyx-guard/
   CONTRIBUTING.md
 
   client/
-    core.lua              # framework RegisterDetection + loops por grupo
+    core.lua              # framework RegisterDetection + loops por grupo + registro de protecciones
     secure_bridge.lua     # firma HMAC de eventos (cliente)
-    detections/           # ~detecciones client-side por categoria
-    protections/          # anti_* (proteccion activa)
+    detections/           # detecciones client-side por categoria (incl. anti_taser, no_props, magneto)
+    protections/          # modulos activos event-driven (anti_entity, anti_yank)
     panel.lua             # NUI del panel
   server/
     detections.lua        # autoridad sobre eventos nativos de gameplay

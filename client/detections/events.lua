@@ -155,16 +155,35 @@ RegisterDetection('functionhook', {
     end
     state.data.lastCheck = GetGameTimer()
 
-    -- Check if common natives are the correct type
+    -- Natives criticas que un cheat suele reemplazar por un closure Lua para
+    -- interceptar/anular llamadas (ej. neutralizar SetEntityHealth del AC).
+    -- Se usa acceso lexico (no rawget) para ser agnostico a como FiveM expone
+    -- las natives (algunas via metatabla __index de _G).
     local nativesToCheck = {
-        { func = GetPlayerPed,    name = 'GetPlayerPed' },
-        { func = GetEntityCoords, name = 'GetEntityCoords' },
-        { func = SetEntityHealth, name = 'SetEntityHealth' }
+        { ref = GetPlayerPed,       name = 'GetPlayerPed' },
+        { ref = GetEntityCoords,    name = 'GetEntityCoords' },
+        { ref = SetEntityHealth,    name = 'SetEntityHealth' },
+        { ref = TriggerServerEvent, name = 'TriggerServerEvent' },
     }
 
-    for _, native in ipairs(nativesToCheck) do
-        if type(native.func) ~= 'function' then
-            return true, { hookedFunction = native.name, type = type(native.func) }
+    -- Snapshot de referencias en la primera corrida (identidad original de la native).
+    if not state.data.baseline then
+        state.data.baseline = {}
+        for _, n in ipairs(nativesToCheck) do
+            state.data.baseline[n.name] = n.ref
+        end
+        return false
+    end
+
+    for _, n in ipairs(nativesToCheck) do
+        -- 1) Ya no es funcion => hook/tamper evidente.
+        if type(n.ref) ~= 'function' then
+            return true, { hookedFunction = n.name, reason = 'not_a_function', type = type(n.ref) }
+        end
+
+        -- 2) La referencia cambio respecto al baseline => reemplazada (hook).
+        if state.data.baseline[n.name] ~= nil and n.ref ~= state.data.baseline[n.name] then
+            return true, { hookedFunction = n.name, reason = 'reference_replaced' }
         end
     end
 

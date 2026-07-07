@@ -131,74 +131,11 @@ RegisterDetection('rapidfire', {
 end)
 
 -- ═══════════════════════════════════════════════════════════════════════════════
--- 2. INFINITE AMMO DETECTION (Munición nunca baja)
+-- 2. INFINITE AMMO DETECTION
+-- (unificado) La deteccion 'infiniteammo' se consolido en
+-- client/detections/weapon_exploits.lua bajo el nombre 'infinite_ammo'
+-- (compara clip ammo por frame, salta melee). Se elimino el registro duplicado aqui.
 -- ═══════════════════════════════════════════════════════════════════════════════
-
-RegisterDetection('infiniteammo', {
-    enabled = true,
-    punishment = 'ban_temp',
-    banDuration = 'long',
-    tolerance = 1,
-    shotsBeforeCheck = 15,    -- Disparos antes de verificar
-    ammoTolerancePercent = 10 -- 10% de margen de error
-}, function(config, state)
-    state.data.weaponTracking = state.data.weaponTracking or {}
-
-    local ped = PlayerPedId()
-    local _, weapon = GetCurrentPedWeapon(ped, true)
-
-    if weapon == GetHashKey('WEAPON_UNARMED') or weapon == GetHashKey('WEAPON_MINIGUN') then
-        return false
-    end
-
-    local weaponHash = tostring(weapon)
-    local currentAmmo = GetAmmoInPedWeapon(ped, weapon)
-    local clipAmmo, maxClip = GetAmmoInClip(ped, weapon)
-
-    if not state.data.weaponTracking[weaponHash] then
-        state.data.weaponTracking[weaponHash] = {
-            startAmmo = currentAmmo,
-            startClip = clipAmmo,
-            shotsFired = 0,
-            lastAmmo = currentAmmo
-        }
-        return false
-    end
-
-    local tracking = state.data.weaponTracking[weaponHash]
-
-    if IsPedShooting(ped) then
-        tracking.shotsFired = tracking.shotsFired + 1
-    end
-
-    -- Verificar después de suficientes disparos
-    if tracking.shotsFired >= config.shotsBeforeCheck then
-        local expectedAmmoLoss = tracking.shotsFired
-        local actualAmmoLoss = tracking.startAmmo - currentAmmo
-
-        -- Si disparó pero la munición no bajó proporcionalmente
-        if actualAmmoLoss < expectedAmmoLoss * (1 - config.ammoTolerancePercent / 100) then
-            -- INFINITE AMMO DETECTED
-            tracking.shotsFired = 0
-            tracking.startAmmo = currentAmmo
-
-            return true, {
-                weapon = weapon,
-                shotsFired = tracking.shotsFired,
-                expectedLoss = expectedAmmoLoss,
-                actualLoss = actualAmmoLoss,
-                type = 'INFINITE_AMMO'
-            }
-        end
-
-        -- Reset tracking
-        tracking.shotsFired = 0
-        tracking.startAmmo = currentAmmo
-    end
-
-    tracking.lastAmmo = currentAmmo
-    return false
-end)
 
 -- ═══════════════════════════════════════════════════════════════════════════════
 -- 3. FAST RELOAD DETECTION (Recarga instantánea)
@@ -467,30 +404,10 @@ RegisterDetection('weaponblacklist', {
 end)
 
 -- ═══════════════════════════════════════════════════════════════════════════════
--- 8. EXPLOSIVE SPAM ULTRA (Spam de explosivos)
+-- 8. EXPLOSIVE SPAM
+-- (unificado) La deteccion 'explosion_spam' vive en client/detections/spam.lua,
+-- que hookea 'explosionEvent' correctamente. Se elimino el stub duplicado que
+-- existia aqui (solo retornaba false).
 -- ═══════════════════════════════════════════════════════════════════════════════
 
-RegisterDetection('explosion_spam', {
-    enabled = true,
-    punishment = 'kick', -- Changed from ban_perm to kick (less harsh for potential false positives)
-    tolerance = 3, -- Increased tolerance
-    maxExplosionsPerSecond = 3, -- Increased limit
-    trackingWindow = 5000 -- Longer window for more accurate rate calculation
-}, function(config, state)
-    -- NOTE: This detection relies on the 'explosionEvent' event handler in entities.lua
-    -- It cannot accurately detect player-caused explosions via polling (IsExplosionInSphere)
-    -- because that native detects ALL explosions in the area, not just player-caused ones.
-    
-    -- This polling method is disabled to prevent false positives from:
-    -- - NPC vehicles exploding
-    -- - Other players using explosives
-    -- - Environmental explosions (gas stations, etc.)
-    -- - Mission-related explosions
-    
-    -- The actual explosive spam detection should be handled server-side
-    -- or via the explosionEvent event which properly identifies the source
-    
-    return false
-end)
-
-print('^2[LyxGuard v4.0]^7 Weapon Detection ULTRA loaded (8 modules)')
+print('^2[LyxGuard v4.0]^7 Weapon Detection ULTRA loaded (rapidfire, fastreload, norecoil, nospread, oneshoot, weaponblacklist)')
