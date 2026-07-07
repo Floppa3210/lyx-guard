@@ -1,4 +1,4 @@
-﻿--[[
+--[[
 
 
 
@@ -352,6 +352,14 @@ Config.Risk = {
         armor_hack_server = 25,
         infinite_ammo_server = 35,
         give_weapon = 45,
+        -- Nuevas detecciones (PL-Protect parity)
+        no_props = 20,
+        magneto = 20,
+        vehicle_invisible = 25,
+        super_punch = 30,
+        audio_flood = 15,
+        -- Secure bridge: firma/nonce invalido = intento de spoof de alta confianza.
+        secure_bridge_invalid = 120,
     },
 
     defaultPoints = 10,
@@ -483,6 +491,14 @@ Config.Quarantine = {
 
         -- Entity firewall server-side
         entity_firewall = true,
+
+        -- Nuevas detecciones (PL-Protect parity). Conservador para evitar falsos positivos.
+        super_punch = true,
+        audio_flood = true,
+        vehicle_invisible = true,
+        magneto = true,
+        no_props = true,
+        secure_bridge_invalid = true,
     },
 
     -- Optional per-reason weights (>=1). Example:
@@ -864,6 +880,31 @@ Config.EventFirewall = {
     maxTotalKeys = 2000,
     maxStringLen = 4096,
     maxTotalStringLen = 20000
+}
+-- ---------------------------------------------------------------------------
+-- SECURE EVENT BRIDGE (intercomunicador cliente<->servidor con HMAC + nonce)
+-- Blinda TUS eventos sensibles contra spoof/replay. Opt-in por evento:
+--   server: RegisterSecureEvent('evt', fn)
+--   client: exports['lyx-guard']:TriggerSecureServerEvent('evt', ...)
+-- ---------------------------------------------------------------------------
+Config.SecureBridge = {
+    enabled = true,
+
+    -- Vida de la key por jugador (ms). Se rota automaticamente al expirar.
+    keyTtlMs = 10 * 60 * 1000,
+
+    -- Ventana anti-replay de nonces (ms) y limite de nonces recordados por jugador.
+    nonceTtlMs = 5 * 60 * 1000,
+    maxUsedNonces = 4096,
+
+    -- Tolerancia de desfase de reloj cliente/servidor (ms). El ts del cliente es
+    -- opcional; si es 0 no se valida tiempo.
+    maxClockSkewMs = 5 * 60 * 1000,
+
+    -- Que hacer cuando llega un evento seguro con firma/nonce invalido.
+    punishOnInvalid = true,
+    punishment = 'kick',
+    tolerance = 1
 }
 -- -----------------------------------------------------------------------------
 -- PANEL DE ADMINISTRACION
@@ -1463,6 +1504,9 @@ Config.Entities = {
         punishment = 'ban_temp',
         banDuration = 'long',
         tolerance = 1,
+        -- Burst control in short window (anti-macro / flood)
+        windowMs = 10000,
+        maxPerWindow = 2,
         maxPerMinute = 3,
         -- Blacklisted explosion types (FiveM explosion type IDs)
         -- Full list: https://docs.fivem.net/docs/game-references/explosion-types/
@@ -1590,6 +1634,9 @@ Config.Entities = {
         tolerance = 2,
         windowMs = 10000,
         maxPerWindow = 8,
+        -- Detects very fast repeated projectile events in the same window
+        minIntervalMs = 120,
+        maxRapidBursts = 4,
         maxSingleBulletPerWindow = 3,
         cancelOnViolation = true,
         blacklistedWeapons = {
@@ -1640,12 +1687,53 @@ Config.Entities = {
         protectDrivers = true,
         -- Grace period after entering vehicle (ms)
         gracePeriod = 2000,
+        -- Server-side validation bounds
+        maxSeatIndex = 8,
+        maxVictimDistance = 30.0,
+        maxAttackerDistance = 40.0,
         -- Jobs that CAN yank players (police, etc)
         allowedJobs = {
             'police',
             'sheriff',
             'fib'
         }
+    },
+-- -----------------------------------------------------------------------------
+    -- SUPER GOLPE / MELEE (server-side)
+    -- Golpe melee/unarmed con dano imposiblemente alto (cheat "super punch").
+-- -----------------------------------------------------------------------------
+    superPunch = {
+        enabled = true,
+        punishment = 'ban_temp',
+        banDuration = 'long',
+        tolerance = 1,
+        -- Dano melee maximo realista; por encima + override = super golpe.
+        maxMeleeDamage = 60,
+        cancelOnViolation = true
+    },
+-- -----------------------------------------------------------------------------
+    -- FLOOD DE AUDIO (server-side)
+    -- Inundacion de eventos de sonido en red (troll/lag).
+-- -----------------------------------------------------------------------------
+    audioFlood = {
+        enabled = true,
+        punishment = 'warn',
+        banDuration = 'medium',
+        tolerance = 2,
+        windowMs = 5000,
+        -- Max eventos de sonido de red por ventana antes de sospechar.
+        maxPerWindow = 25,
+        cancelOnViolation = true
+    },
+-- -----------------------------------------------------------------------------
+    -- MAGNETO (server-side override para la deteccion client-side 'magneto')
+    -- La logica corre en cliente; aqui solo se puede ajustar el castigo server.
+-- -----------------------------------------------------------------------------
+    magneto = {
+        enabled = true,
+        punishment = 'warn',
+        banDuration = 'medium',
+        tolerance = 3
     }
 }
 -- -----------------------------------------------------------------------------

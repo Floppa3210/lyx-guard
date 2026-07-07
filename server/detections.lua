@@ -1,4 +1,4 @@
-﻿--[[
+--[[
     
                    LYXGUARD v4.0 - SERVER-SIDE DETECTIONS                         
                       Event validation, money tracking, etc.                      
@@ -586,8 +586,18 @@ CreateThread(function()
     ESX = ESX or _G.ESX
 
     if not ESX then
-        print('^1[LyxGuard]^7 detections: ESX no disponible (timeout).')
-        return
+        print('^3[LyxGuard]^7 detections: ESX no disponible (timeout inicial). Reintentando cada 2s...')
+        while not ESX do
+            Wait(2000)
+            if LyxGuard and LyxGuard.GetESX then
+                ESX = LyxGuard.GetESX()
+            end
+            if not ESX and LyxGuard and LyxGuard.WaitForESX then
+                ESX = LyxGuard.WaitForESX(2000)
+            end
+            ESX = ESX or _G.ESX
+        end
+        print('^2[LyxGuard]^7 detections: ESX detectado tras reintento.')
     end
 
     _G.ESX = _G.ESX or ESX
@@ -649,6 +659,7 @@ local function TrackPlayerEvent(source, eventName)
 end
 
 local _ExplosionHistory = {}
+local _ExplosionWindowHistory = {}
 local _PtfxHistory = {}
 local _ClearPedTasksHistory = {}
 local _EntityVehicleHistory = {}
@@ -808,18 +819,31 @@ AddEventHandler('explosionEvent', function(sender, ev)
         end
     end
 
-    local counter = _GetMinuteCounter(_ExplosionHistory, sender)
-    counter.count = (counter.count or 0) + 1
+    local minuteCounter = _GetMinuteCounter(_ExplosionHistory, sender)
+    minuteCounter.count = (minuteCounter.count or 0) + 1
+
+    local windowMs = tonumber(cfg.windowMs) or 10000
+    local maxPerWindow = tonumber(cfg.maxPerWindow) or 0
+    local burstCounter = _GetWindowCounter(_ExplosionWindowHistory, sender, windowMs)
+    burstCounter.count = (burstCounter.count or 0) + 1
 
     local shouldBlock = false
+    local violation = nil
     if inProtectedZone then
         shouldBlock = true
+        violation = 'protected_zone'
     end
     if isBlacklistedType then
         shouldBlock = true
+        violation = violation or 'blacklisted_type'
     end
-    if cfg.maxPerMinute and counter.count > (cfg.maxPerMinute or 3) then
+    if cfg.maxPerMinute and minuteCounter.count > (cfg.maxPerMinute or 3) then
         shouldBlock = true
+        violation = violation or 'explosion_spam_minute'
+    end
+    if maxPerWindow > 0 and burstCounter.count > maxPerWindow then
+        shouldBlock = true
+        violation = violation or 'explosion_spam_window'
     end
 
     if shouldBlock then
@@ -827,16 +851,22 @@ AddEventHandler('explosionEvent', function(sender, ev)
 
         MarkPlayerSuspicious(sender, 'explosion_event', {
             explosionType = explosionType,
-            count = counter.count,
-            protectedZone = inProtectedZone
+            minuteCount = minuteCounter.count,
+            maxPerMinute = tonumber(cfg.maxPerMinute) or 0,
+            windowCount = burstCounter.count,
+            maxPerWindow = maxPerWindow,
+            protectedZone = inProtectedZone,
+            violation = violation
         })
 
         if ApplyPunishment then
             ApplyPunishment(sender, 'explosion', cfg, {
                 reason = 'Explosin bloqueada (server-side)',
                 explosionType = explosionType,
-                count = counter.count,
-                protectedZone = inProtectedZone
+                minuteCount = minuteCounter.count,
+                windowCount = burstCounter.count,
+                protectedZone = inProtectedZone,
+                violation = violation
             }, vector3(ex, ey, ez))
         end
     end
@@ -912,7 +942,7 @@ AddEventHandler('clearPedTasksEvent', function(sender, data)
 end)
 
 AddEventHandler('entityCreating', function(entity)
-    if not entity or entity == 0 or not DoesEntityExist(entity) then return end
+    if not entity or entity == 0 then return end
     if type(NetworkGetEntityOwner) ~= 'function' then return end
 
     local owner = NetworkGetEntityOwner(entity)
@@ -920,11 +950,18 @@ AddEventHandler('entityCreating', function(entity)
     if _IsPlayerImmuneOrSafe(owner, 'entity') then return end
 
     local entType = GetEntityType(entity)
-    local model = GetEntityModel(entity)
-    local coords = GetEntityCoords(entity)
 
     if entType ~= 1 and entType ~= 2 and entType ~= 3 then
         return
+    end
+
+    local model = GetEntityModel(entity)
+    local coords = _GetPlayerCoords(owner)
+    if DoesEntityExist(entity) then
+        local entityCoords = GetEntityCoords(entity)
+        if entityCoords then
+            coords = entityCoords
+        end
     end
 
     local nowMs = GetGameTimer()
@@ -1126,8 +1163,21 @@ AddEventHandler('startProjectileEvent', function(sender, data)
     local weaponHash = type(data) == 'table' and (tonumber(data.weaponHash) or tonumber(data.weaponType)) or nil
     local projectileHash = type(data) == 'table' and tonumber(data.projectileHash) or nil
     local singleBullet = type(data) == 'table' and data.commandFireSingleBullet == true
+    local nowMs = GetGameTimer()
     if singleBullet then
         counter.extra.singleBullets = (tonumber(counter.extra.singleBullets) or 0) + 1
+    end
+
+    local minIntervalMs = tonumber(cfg.minIntervalMs) or 0
+    local maxRapidBursts = tonumber(cfg.maxRapidBursts) or 0
+    if minIntervalMs > 0 then
+        local lastShotMs = tonumber(counter.extra.lastShotMs) or 0
+        if lastShotMs > 0 and (nowMs - lastShotMs) < minIntervalMs then
+            counter.extra.rapidBursts = (tonumber(counter.extra.rapidBursts) or 0) + 1
+        elseif (tonumber(counter.extra.rapidBursts) or 0) > 0 then
+            counter.extra.rapidBursts = math.max(0, (tonumber(counter.extra.rapidBursts) or 0) - 1)
+        end
+        counter.extra.lastShotMs = nowMs
     end
 
     local violation = nil
@@ -1141,6 +1191,8 @@ AddEventHandler('startProjectileEvent', function(sender, data)
         and (tonumber(counter.extra.singleBullets) or 0) > (tonumber(cfg.maxSingleBulletPerWindow) or 0)
     then
         violation = 'single_bullet_abuse'
+    elseif maxRapidBursts > 0 and (tonumber(counter.extra.rapidBursts) or 0) > maxRapidBursts then
+        violation = 'rapid_projectile_burst'
     end
 
     if not violation then
@@ -1168,6 +1220,9 @@ AddEventHandler('startProjectileEvent', function(sender, data)
         maxPerWindow = tonumber(cfg.maxPerWindow) or 0,
         singleBullets = tonumber(counter.extra.singleBullets) or 0,
         maxSingleBullets = tonumber(cfg.maxSingleBulletPerWindow) or 0,
+        rapidBursts = tonumber(counter.extra.rapidBursts) or 0,
+        maxRapidBursts = maxRapidBursts,
+        minIntervalMs = minIntervalMs,
         weaponHash = weaponHash,
         projectileHash = projectileHash
     }
@@ -1179,6 +1234,7 @@ AddEventHandler('startProjectileEvent', function(sender, data)
             reason = 'startProjectileEvent bloqueado (server-side)',
             violation = violation,
             count = counter.count,
+            rapidBursts = tonumber(counter.extra.rapidBursts) or 0,
             weaponHash = weaponHash,
             projectileHash = projectileHash
         }, coords)
@@ -1294,6 +1350,151 @@ AddEventHandler('entityRemoved', function(entity)
             entityType = tracked.entityType,
             model = tracked.model
         }, _GetPlayerCoords(owner))
+    end
+end)
+
+-- ---------------------------------------------------------------------------
+-- SUPER GOLPE / MELEE DAMAGE (server-side)
+-- weaponDamageEvent generico ya existe arriba; este handler se enfoca en golpes
+-- melee/unarmed con dano imposiblemente alto (cheat "super punch").
+-- ---------------------------------------------------------------------------
+
+local _MeleeGroupHashes = {
+    [GetHashKey('GROUP_UNARMED')] = true,
+    [GetHashKey('GROUP_MELEE')] = true,
+    [GetHashKey('WEAPON_GROUP_MELEE')] = true,
+}
+
+local _MeleeWeaponHashes = {
+    [GetHashKey('WEAPON_UNARMED')] = true,
+    [GetHashKey('WEAPON_KNIFE')] = true,
+    [GetHashKey('WEAPON_BAT')] = true,
+    [GetHashKey('WEAPON_CROWBAR')] = true,
+    [GetHashKey('WEAPON_HAMMER')] = true,
+    [GetHashKey('WEAPON_KNUCKLE')] = true,
+    [GetHashKey('WEAPON_MACHETE')] = true,
+    [GetHashKey('WEAPON_FLASHLIGHT')] = true,
+    [GetHashKey('WEAPON_NIGHTSTICK')] = true,
+    [GetHashKey('WEAPON_BOTTLE')] = true,
+    [GetHashKey('WEAPON_DAGGER')] = true,
+    [GetHashKey('WEAPON_HATCHET')] = true,
+    [GetHashKey('WEAPON_POOLCUE')] = true,
+    [GetHashKey('WEAPON_WRENCH')] = true,
+    [GetHashKey('WEAPON_BATTLEAXE')] = true,
+    [GetHashKey('WEAPON_STONE_HATCHET')] = true,
+}
+
+AddEventHandler('weaponDamageEvent', function(sender, data)
+    if not _IsSourceValid(sender) then return end
+    if _IsPlayerImmuneOrSafe(sender, 'weapon') then return end
+
+    local cfg = Config and Config.Entities and Config.Entities.superPunch or nil
+    if not cfg or cfg.enabled ~= true then return end
+    if type(data) ~= 'table' then return end
+
+    local weaponHash = tonumber(data.weaponType) or tonumber(data.weaponHash)
+    if not weaponHash then return end
+
+    -- Solo nos interesan golpes melee/unarmed.
+    if not (_MeleeWeaponHashes[weaponHash] or _MeleeGroupHashes[weaponHash]) then
+        return
+    end
+
+    local damage = tonumber(data.weaponDamage) or tonumber(data.damage) or 0
+    local overrideDamage = data.overrideDefaultDamage == true
+    local maxMeleeDamage = tonumber(cfg.maxMeleeDamage) or 60
+
+    -- Melee legitimo raramente supera ~50-60 de dano; override + dano alto = super golpe.
+    local isSuper = damage > maxMeleeDamage and (overrideDamage or damage > (maxMeleeDamage * 2))
+    if not isSuper then
+        return
+    end
+
+    if cfg.cancelOnViolation ~= false then
+        CancelEvent()
+    end
+
+    local details = {
+        type = 'SUPER_PUNCH',
+        weaponHash = weaponHash,
+        damage = damage,
+        maxMeleeDamage = maxMeleeDamage,
+        overrideDefaultDamage = overrideDamage
+    }
+
+    MarkPlayerSuspicious(sender, 'super_punch', details)
+
+    if ApplyPunishment then
+        ApplyPunishment(sender, 'super_punch', cfg, {
+            reason = 'Super golpe melee detectado (server-side)',
+            weaponHash = weaponHash,
+            damage = damage,
+            maxMeleeDamage = maxMeleeDamage,
+            overrideDefaultDamage = overrideDamage
+        }, _GetPlayerCoords(sender))
+    end
+end)
+
+-- ---------------------------------------------------------------------------
+-- FLOOD DE AUDIO (server-side)
+-- Executors inundan el servidor con eventos de sonido en red para molestar/laggear.
+-- Cubrimos el evento de sonido de red del juego con un presupuesto por jugador/ventana.
+-- ---------------------------------------------------------------------------
+
+local _AudioFloodHistory = {}
+
+local function _HandleAudioNetworkEvent(sender)
+    if not _IsSourceValid(sender) then return end
+    if _IsPlayerImmuneOrSafe(sender, 'audio') then return end
+
+    local cfg = Config and Config.Entities and Config.Entities.audioFlood or nil
+    if not cfg or cfg.enabled ~= true then return end
+
+    local windowMs = tonumber(cfg.windowMs) or 5000
+    local counter = _GetWindowCounter(_AudioFloodHistory, sender, windowMs)
+    counter.count = (counter.count or 0) + 1
+
+    local maxPerWindow = tonumber(cfg.maxPerWindow) or 25
+    if counter.count <= maxPerWindow then
+        return
+    end
+
+    if cfg.cancelOnViolation ~= false then
+        CancelEvent()
+    end
+
+    local details = {
+        type = 'AUDIO_FLOOD',
+        count = counter.count,
+        maxPerWindow = maxPerWindow,
+        windowMs = windowMs
+    }
+
+    MarkPlayerSuspicious(sender, 'audio_flood', details)
+
+    if ApplyPunishment then
+        ApplyPunishment(sender, 'audio_flood', cfg, {
+            reason = 'Flood de audio detectado (server-side)',
+            count = counter.count,
+            maxPerWindow = maxPerWindow
+        }, _GetPlayerCoords(sender))
+    end
+end
+
+-- Evento de sonido de red del juego (frontend / world sounds sincronizados).
+AddEventHandler('CEventNetworkPlaySound', function(sender)
+    _HandleAudioNetworkEvent(sender)
+end)
+
+CreateThread(function()
+    while true do
+        Wait(60000)
+        local nowMs = GetGameTimer()
+        for src, counter in pairs(_AudioFloodHistory) do
+            if type(counter) ~= 'table' or (nowMs - (tonumber(counter.windowStart) or 0)) > 120000 then
+                _AudioFloodHistory[src] = nil
+            end
+        end
     end
 end)
 
@@ -2093,6 +2294,7 @@ AddEventHandler('playerDropped', function()
     PlayerSafeState[source] = nil
 
     _ExplosionHistory[source] = nil
+    _ExplosionWindowHistory[source] = nil
     _PtfxHistory[source] = nil
     _ClearPedTasksHistory[source] = nil
     _EntityVehicleHistory[source] = nil
@@ -2141,39 +2343,129 @@ end)
 
 -- 
 -- ANTI-YANK SERVER VALIDATION
--- Client reports suspected vehicle yank, server validates attacker job/permissions
+-- Client reports suspected vehicle yank, server resolves attacker from entity state.
 -- 
+local function _YankDistance(a, b)
+    if not a or not b then return nil end
+    local dx = (tonumber(a.x) or 0.0) - (tonumber(b.x) or 0.0)
+    local dy = (tonumber(a.y) or 0.0) - (tonumber(b.y) or 0.0)
+    local dz = (tonumber(a.z) or 0.0) - (tonumber(b.z) or 0.0)
+    return math.sqrt((dx * dx) + (dy * dy) + (dz * dz))
+end
 
-RegisterNetEvent('lyxguard:validateYank', function(attackerSource, data)
-    local victim = source
-    if not _IsSourceValid(victim) then return end
+local function _YankVectorFromPayload(raw)
+    if type(raw) ~= 'table' then
+        return nil
+    end
+    local x = tonumber(raw.x)
+    local y = tonumber(raw.y)
+    local z = tonumber(raw.z)
+    if not x or not y or not z then
+        return nil
+    end
+    return vector3(x, y, z)
+end
 
-    local cfg = Config and Config.Entities and Config.Entities.antiYank or nil
-    if not cfg or cfg.enabled ~= true then return end
-
-    local now = GetGameTimer()
-    local last = _YankValidateCooldown[victim] or 0
-    if (now - last) < 2000 then return end
-    _YankValidateCooldown[victim] = now
-
-    attackerSource = tonumber(attackerSource)
-    if not attackerSource or attackerSource <= 0 or not GetPlayerName(attackerSource) then
-        return
+local function _ResolveYankAttackerServerSide(victim, payload, cfg)
+    if type(payload) ~= 'table' then
+        return nil, 'payload_not_table', {}
     end
 
-    if _IsPlayerImmuneOrSafe(attackerSource, 'entity') then
-        return
+    local vehicleNetId = tonumber(payload.vehicleNetId)
+    if not vehicleNetId or vehicleNetId <= 0 then
+        return nil, 'vehicle_netid_invalid', { vehicleNetId = payload.vehicleNetId }
     end
+
+    local seat = math.floor(tonumber(payload.seat) or 999)
+    local maxSeatIndex = math.max(tonumber(cfg and cfg.maxSeatIndex) or 8, -1)
+    if seat < -1 or seat > maxSeatIndex then
+        return nil, 'seat_out_of_bounds', { seat = seat, maxSeatIndex = maxSeatIndex }
+    end
+
+    local vehicle = NetworkGetEntityFromNetworkId(vehicleNetId)
+    if not vehicle or vehicle == 0 or not DoesEntityExist(vehicle) then
+        return nil, 'vehicle_not_found', { vehicleNetId = vehicleNetId }
+    end
+    if GetEntityType(vehicle) ~= 2 then
+        return nil, 'vehicle_type_invalid', { vehicleNetId = vehicleNetId, entityType = GetEntityType(vehicle) }
+    end
+
+    local seatPed = GetPedInVehicleSeat(vehicle, seat)
+    if not seatPed or seatPed == 0 then
+        return nil, 'seat_empty', { seat = seat, vehicleNetId = vehicleNetId }
+    end
+    if not IsPedAPlayer(seatPed) then
+        return nil, 'seat_not_player', { seat = seat, vehicleNetId = vehicleNetId }
+    end
+
+    local attackerSource = NetworkGetEntityOwner(seatPed)
+    if not _IsSourceValid(attackerSource) then
+        return nil, 'attacker_unresolved', { seat = seat, vehicleNetId = vehicleNetId }
+    end
+    if attackerSource == victim then
+        return nil, 'attacker_equals_victim', { seat = seat, vehicleNetId = vehicleNetId }
+    end
+
+    local vehicleCoords = GetEntityCoords(vehicle)
+    local victimCoords = nil
+    local victimPed = GetPlayerPed(victim)
+    if victimPed and victimPed ~= 0 and DoesEntityExist(victimPed) then
+        victimCoords = GetEntityCoords(victimPed)
+    end
+    if not victimCoords then
+        victimCoords = _YankVectorFromPayload(payload.victimCoords)
+    end
+
+    local victimDistance = _YankDistance(victimCoords, vehicleCoords)
+    local maxVictimDistance = math.max(tonumber(cfg and cfg.maxVictimDistance) or 30.0, 1.0)
+    if victimDistance and victimDistance > maxVictimDistance then
+        return nil, 'victim_too_far', {
+            seat = seat,
+            vehicleNetId = vehicleNetId,
+            victimDistance = victimDistance,
+            maxVictimDistance = maxVictimDistance
+        }
+    end
+
+    local attackerDistance = nil
+    local maxAttackerDistance = math.max(tonumber(cfg and cfg.maxAttackerDistance) or 40.0, 1.0)
+    local attackerPed = GetPlayerPed(attackerSource)
+    if attackerPed and attackerPed ~= 0 and DoesEntityExist(attackerPed) then
+        attackerDistance = _YankDistance(GetEntityCoords(attackerPed), vehicleCoords)
+        if attackerDistance and attackerDistance > maxAttackerDistance then
+            return nil, 'attacker_too_far', {
+                seat = seat,
+                vehicleNetId = vehicleNetId,
+                attackerDistance = attackerDistance,
+                maxAttackerDistance = maxAttackerDistance
+            }
+        end
+    end
+
+    local candidateAttacker = tonumber(payload.candidateAttacker)
+    local candidateMismatch = candidateAttacker and candidateAttacker > 0 and candidateAttacker ~= attackerSource or false
+
+    return attackerSource, nil, {
+        seat = seat,
+        doorLock = tonumber(payload.doorLock),
+        vehicleNetId = vehicleNetId,
+        victimDistance = victimDistance,
+        attackerDistance = attackerDistance,
+        candidateAttacker = candidateAttacker,
+        candidateMismatch = candidateMismatch
+    }
+end
+
+local function _IsYankAllowedJob(cfg, attackerSource)
+    local jobName = 'unknown'
 
     if not ESX then
         ESX = (LyxGuard and LyxGuard.GetESX and LyxGuard.GetESX()) or ESX
     end
-    if not ESX then
-        return
+    if ESX then
+        local xA = ESX.GetPlayerFromId(attackerSource)
+        jobName = (xA and xA.getJob and xA.getJob().name) or 'unknown'
     end
-
-    local xA = ESX.GetPlayerFromId(attackerSource)
-    local jobName = (xA and xA.getJob and xA.getJob().name) or 'unknown'
 
     local allowed = false
     if type(cfg.allowedJobs) == 'table' then
@@ -2185,6 +2477,54 @@ RegisterNetEvent('lyxguard:validateYank', function(attackerSource, data)
         end
     end
 
+    return allowed, jobName
+end
+
+RegisterNetEvent('lyxguard:validateYank', function(data)
+    local victim = source
+    if not _IsSourceValid(victim) then return end
+
+    local cfg = Config and Config.Entities and Config.Entities.antiYank or nil
+    if not cfg or cfg.enabled ~= true then return end
+
+    local now = GetGameTimer()
+    local last = _YankValidateCooldown[victim] or 0
+    if (now - last) < 2000 then return end
+    _YankValidateCooldown[victim] = now
+
+    local attackerSource, rejectReason, resolveMeta = _ResolveYankAttackerServerSide(victim, data, cfg)
+    if not attackerSource then
+        if type(_PushExLog) == 'function' then
+            _PushExLog({
+                level = 'debug',
+                actor_type = 'player',
+                actor_id = GetIdentifier(victim, 'license'),
+                actor_name = GetPlayerName(victim),
+                resource = 'lyx-guard',
+                action = 'anti_yank_validation',
+                event = 'lyxguard:validateYank',
+                result = 'ignored',
+                reason = tostring(rejectReason or 'resolver_failed'),
+                metadata = {
+                    source = victim,
+                    payload = type(data) == 'table' and {
+                        vehicleNetId = data.vehicleNetId,
+                        seat = data.seat,
+                        candidateAttacker = data.candidateAttacker
+                    } or nil,
+                    resolve = resolveMeta
+                }
+            })
+        end
+        return
+    end
+
+    if _IsPlayerImmuneOrSafe(attackerSource, 'entity') then
+        return
+    end
+
+    local allowed, jobName = _IsYankAllowedJob(cfg, attackerSource)
+
     if allowed then
         return
     end
@@ -2193,8 +2533,12 @@ RegisterNetEvent('lyxguard:validateYank', function(attackerSource, data)
         victim = GetPlayerName(victim) or 'Unknown',
         attacker = GetPlayerName(attackerSource) or 'Unknown',
         attackerJob = jobName,
-        seat = type(data) == 'table' and data.seat or nil,
-        doorLock = type(data) == 'table' and data.doorLock or nil
+        seat = resolveMeta and resolveMeta.seat or nil,
+        doorLock = resolveMeta and resolveMeta.doorLock or nil,
+        vehicleNetId = resolveMeta and resolveMeta.vehicleNetId or nil,
+        victimDistance = resolveMeta and resolveMeta.victimDistance or nil,
+        attackerDistance = resolveMeta and resolveMeta.attackerDistance or nil,
+        candidateMismatch = resolveMeta and resolveMeta.candidateMismatch or false
     })
 
     if ApplyPunishment then
@@ -2202,8 +2546,10 @@ RegisterNetEvent('lyxguard:validateYank', function(attackerSource, data)
             reason = 'Anti-Yank: remocin de vehculo no autorizada',
             victim = GetPlayerName(victim) or 'Unknown',
             attackerJob = jobName,
-            seat = type(data) == 'table' and data.seat or nil,
-            doorLock = type(data) == 'table' and data.doorLock or nil
+            seat = resolveMeta and resolveMeta.seat or nil,
+            doorLock = resolveMeta and resolveMeta.doorLock or nil,
+            vehicleNetId = resolveMeta and resolveMeta.vehicleNetId or nil,
+            candidateMismatch = resolveMeta and resolveMeta.candidateMismatch or false
         }, _GetPlayerCoords(attackerSource))
     end
 end)

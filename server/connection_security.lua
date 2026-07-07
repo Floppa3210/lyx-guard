@@ -1,4 +1,4 @@
-﻿--[[
+--[[
     LyxGuard - Connection Security Module
     Anti-VPN, VAC Ban checker, Name filter, and enhanced deferrals
     Based on Icarus DeferralsModule

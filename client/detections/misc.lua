@@ -258,4 +258,85 @@ RegisterDetection('worldmanip', {
     return false
 end)
 
+-- ═══════════════════════════════════════════════════════════════════════════════
+-- 11. ANTI NO-PROPS (Hidden world props / objects)
+-- Cheats "no-props" ocultan masivamente objetos del mundo (props del mapa) poniendolos
+-- invisibles o con alpha ~0 para ganar visibilidad. Un cliente legitimo nunca hace esto
+-- a escala sobre los CObject del pool. Contamos objetos cercanos ocultos por el jugador.
+-- ═══════════════════════════════════════════════════════════════════════════════
+
+RegisterDetection('no_props', {
+    enabled = true,
+    punishment = 'warn',
+    banDuration = 'medium',
+    tolerance = 2,
+    checkInterval = 2000,
+    -- Radio de escaneo alrededor del jugador (metros).
+    scanRadius = 25.0,
+    -- Cuantos objetos del mundo ocultos (invisibles o alpha bajo) antes de sospechar.
+    maxHiddenObjects = 12,
+    -- Alpha por debajo del cual un objeto se considera "oculto" por cheat.
+    hiddenAlphaThreshold = 30,
+    ignoreGracePeriod = false
+}, function(config, state)
+    state.data.lastCheck = state.data.lastCheck or GetGameTimer()
+
+    if GetGameTimer() - state.data.lastCheck < (config.checkInterval or 2000) then
+        return false
+    end
+    state.data.lastCheck = GetGameTimer()
+
+    -- Admins/spectate legitimos pueden manipular el mundo.
+    if LocalPlayer.state.isSpectating or LocalPlayer.state.adminInvisible then
+        return false
+    end
+
+    local ped = PlayerPedId()
+    local pcoords = GetEntityCoords(ped)
+    local radius = config.scanRadius or 25.0
+    local radiusSq = radius * radius
+    local alphaThreshold = config.hiddenAlphaThreshold or 30
+    local maxHidden = config.maxHiddenObjects or 12
+
+    local hidden = 0
+
+    -- GetGamePool('CObject') = props/objetos del mundo (no incluye peds/vehiculos).
+    local pool = GetGamePool('CObject')
+    if type(pool) ~= 'table' then
+        return false
+    end
+
+    for i = 1, #pool do
+        local obj = pool[i]
+        if obj and obj ~= 0 and DoesEntityExist(obj) then
+            local ocoords = GetEntityCoords(obj)
+            local dx = ocoords.x - pcoords.x
+            local dy = ocoords.y - pcoords.y
+            local dz = ocoords.z - pcoords.z
+            if (dx * dx + dy * dy + dz * dz) <= radiusSq then
+                -- Solo cuenta si el objeto esta oculto pero SIGUE existiendo (patron no-props).
+                local visible = IsEntityVisible(obj)
+                local alpha = GetEntityAlpha(obj)
+                if (not visible) or (alpha > 0 and alpha < alphaThreshold) then
+                    hidden = hidden + 1
+                    if hidden > maxHidden then
+                        break
+                    end
+                end
+            end
+        end
+    end
+
+    if hidden > maxHidden then
+        return true, {
+            hiddenObjects = hidden,
+            maxAllowed = maxHidden,
+            scanRadius = radius,
+            type = 'NO_PROPS'
+        }
+    end
+
+    return false
+end)
+
 print('[LyxGuard] Miscellaneous detection module loaded')

@@ -1,4 +1,4 @@
-﻿/*
+/*
     LyxGuard v4.0 - Anticheat Panel JavaScript
     Handles all UI interactions, NUI callbacks, and real-time events
 */

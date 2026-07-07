@@ -18,6 +18,8 @@ local TaskWarpPedIntoVehicle = TaskWarpPedIntoVehicle
 local GetVehicleDoorLockStatus = GetVehicleDoorLockStatus
 local NetworkGetPlayerIndexFromPed = NetworkGetPlayerIndexFromPed
 local GetPlayerServerId = GetPlayerServerId
+local NetworkGetNetworkIdFromEntity = NetworkGetNetworkIdFromEntity
+local GetEntityCoords = GetEntityCoords
 
 -- State
 local lastVehicle = nil
@@ -31,25 +33,6 @@ local config = nil
 
 -- Callback for detections
 Protection.OnDetection = nil
-
--- Get current ESX player data
-local function GetPlayerJob()
-    if ESX and ESX.GetPlayerData then
-        local playerData = ESX.GetPlayerData()
-        if playerData and playerData.job then
-            return playerData.job.name
-        end
-    end
-    return nil
-end
-
--- Check if attacker has allowed job
-local function IsAllowedJob(attackerSource)
-    if not config or not config.allowedJobs then return false end
-    -- We can't easily check other player's job client-side
-    -- This would need server validation
-    return false
-end
 
 -- Main check function
 function Protection.Run()
@@ -105,13 +88,25 @@ function Protection.Run()
                         -- Someone took our seat = possible hijack/yank
                         local attackerPlayer = NetworkGetPlayerIndexFromPed(pedInSeat)
                         local attackerSource = GetPlayerServerId(attackerPlayer)
-                        
-                        -- Trigger server-side check (attacker job validation)
-                        TriggerServerEvent('lyxguard:validateYank', attackerSource, {
-                            vehicle = lastVehicle,
-                            seat = lastSeat,
-                            doorLock = doorLock
-                        })
+                        local vehicleNetId = NetworkGetNetworkIdFromEntity(lastVehicle)
+                        local pedCoords = GetEntityCoords(ped)
+
+                        -- Trigger server-side validation with resolvable identifiers only.
+                        -- attackerSource is telemetry-only and not trusted by server logic.
+                        if vehicleNetId and vehicleNetId ~= 0 then
+                            TriggerServerEvent('lyxguard:validateYank', {
+                                vehicleNetId = vehicleNetId,
+                                seat = lastSeat,
+                                doorLock = doorLock,
+                                candidateAttacker = attackerSource,
+                                victimCoords = {
+                                    x = pedCoords.x,
+                                    y = pedCoords.y,
+                                    z = pedCoords.z
+                                },
+                                clientTime = now
+                            })
+                        end
                     end
                 end
             end

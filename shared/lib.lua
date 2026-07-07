@@ -4,7 +4,7 @@
     ║                        Shared Utility Library                                 ║
     ╠═══════════════════════════════════════════════════════════════════════════════╣
     ║  Author: LyxDev                                                               ║
-    ║  License: Commercial                                                          ║
+    ║  License: MIT                                                                 ║
     ║  Purpose: Pure utility functions shared between server and client             ║
     ╚═══════════════════════════════════════════════════════════════════════════════╝
 ]]

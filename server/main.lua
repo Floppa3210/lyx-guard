@@ -1,10 +1,10 @@
-﻿--[[
+--[[
     
                                LYXGUARD v4.0 PROFESSIONAL                         
                                  Server Main Module                                
     
       Author: LyxDev                                                               
-      License: Commercial                                                          
+      License: MIT
       Purpose: Server initialization, player management, and event handling       
     
 ]]

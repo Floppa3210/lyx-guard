@@ -26,6 +26,7 @@ files {
 shared_scripts {
     '@es_extended/imports.lua',
     'config.lua',
+    'shared/sha2.lua',
     'shared/*.lua'
 }
 
@@ -42,6 +43,7 @@ server_scripts {
     'server/webhooks.lua',
     'server/detections.lua',
     'server/trigger_protection.lua',
+    'server/secure_bridge.lua',
     'server/admin_config.lua',
     'server/panel.lua',
     'server/main.lua'
@@ -49,6 +51,7 @@ server_scripts {
 
 client_scripts {
     'client/core.lua',
+    'client/secure_bridge.lua',
     'client/protection_loader.lua',
     'client/protections/*.lua',
     'client/protection_registrar.lua',
@@ -73,5 +76,7 @@ exports {
     'PushExhaustiveLog',
     'TrackExhaustivePlayerAction',
     'GetExhaustiveTimeline',
-    'FlushExhaustiveLogs'
+    'FlushExhaustiveLogs',
+    'RegisterSecureEvent',
+    'TriggerSecureServerEvent'
 }

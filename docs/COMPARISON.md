@@ -1,4 +1,4 @@
-﻿# LyxGuard - Comparaciones y Alcance
+# LyxGuard - Comparaciones y Alcance
 
 Este documento compara el enfoque de LyxGuard con:
 - anticheats open source 

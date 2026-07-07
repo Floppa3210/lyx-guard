@@ -1,10 +1,10 @@
-﻿--[[
+--[[
     
                                LYXGUARD v4.0 PROFESSIONAL                         
                                Client Bootstrap                                    
     
       Author: LyxDev                                                               
-      License: Commercial                                                          
+      License: MIT
       Purpose: Client initialization and event handling                            
     
 ]]

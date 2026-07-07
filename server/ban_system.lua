@@ -1,4 +1,4 @@
-﻿--[[
+--[[
     LyxGuard - Enhanced Ban System
     Supports HWID/Token bans, Player Cache for offline bans
     Based on vAdmin ban system + FIREAC

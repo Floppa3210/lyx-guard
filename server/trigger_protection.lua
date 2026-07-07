@@ -1,4 +1,4 @@
-﻿--[[
+--[[
     LyxGuard v4.1 - Trigger Spam Protection (Server-Side)
 
     Extracted concepts from: FIREAC, SecureServe
@@ -628,6 +628,8 @@ local SpamCheckedEvents = {
     ['lyxguard:detection'] = { maxPerSecond = 6, window = 2000 },
     ['lyxguard:sync:playerData'] = { maxPerSecond = 2, window = 2000 },
     ['lyxguard:sync:weapons'] = { maxPerSecond = 2, window = 2000 },
+    ['lyxguard:validateYank'] = { maxPerSecond = 2, window = 2500 },
+    ['lyxguard:bridge:requestKey'] = { maxPerSecond = 2, window = 3000 },
 }
 -- -----------------------------------------------------------------------------
 -- EVENT FIREWALL (Allowlist + payload anomaly checks)
@@ -661,6 +663,9 @@ local AllowedLyxGuardEvents = {
     ['lyxguard:sync:playerData'] = true,
     ['lyxguard:sync:weapons'] = true,
     ['lyxguard:validateYank'] = true,
+
+    -- Secure event bridge (key request)
+    ['lyxguard:bridge:requestKey'] = true,
 
     -- Guard panel
     ['lyxguard:panel:open'] = true,
@@ -1036,13 +1041,53 @@ local function _ValidateSyncWeaponsPayload(args)
 end
 
 local function _ValidateYankPayload(args)
-    local attackerSource = tonumber(args[1])
-    if not attackerSource or attackerSource <= 0 or attackerSource > 4096 then
-        return false, 'schema_validate_yank_attacker_invalid', { value = args[1] }
+    local data = args[1]
+    if type(data) ~= 'table' then
+        return false, 'schema_validate_yank_not_table', { actual = type(data) }
     end
 
-    if args[2] ~= nil and type(args[2]) ~= 'table' then
-        return false, 'schema_validate_yank_data_bad_type', { actual = type(args[2]) }
+    local vehicleNetId = tonumber(data.vehicleNetId)
+    if not vehicleNetId or vehicleNetId <= 0 or vehicleNetId > 2147483647 or (vehicleNetId % 1) ~= 0 then
+        return false, 'schema_validate_yank_vehicle_netid_invalid', { value = data.vehicleNetId }
+    end
+
+    local seat = tonumber(data.seat)
+    if not seat or (seat % 1) ~= 0 or seat < -1 or seat > 64 then
+        return false, 'schema_validate_yank_seat_invalid', { value = data.seat }
+    end
+
+    if data.candidateAttacker ~= nil then
+        local attacker = tonumber(data.candidateAttacker)
+        if not attacker or (attacker % 1) ~= 0 or attacker <= 0 or attacker > 4096 then
+            return false, 'schema_validate_yank_candidate_attacker_invalid', { value = data.candidateAttacker }
+        end
+    end
+
+    if data.doorLock ~= nil and type(data.doorLock) ~= 'number' then
+        return false, 'schema_validate_yank_door_lock_bad_type', { actual = type(data.doorLock) }
+    end
+
+    if data.clientTime ~= nil then
+        local clientTime = tonumber(data.clientTime)
+        if not clientTime or clientTime < 0 or clientTime > 2147483647 then
+            return false, 'schema_validate_yank_client_time_invalid', { value = data.clientTime }
+        end
+    end
+
+    if data.victimCoords ~= nil then
+        if type(data.victimCoords) ~= 'table' then
+            return false, 'schema_validate_yank_victim_coords_not_table', { actual = type(data.victimCoords) }
+        end
+
+        local x = tonumber(data.victimCoords.x)
+        local y = tonumber(data.victimCoords.y)
+        local z = tonumber(data.victimCoords.z)
+        if not x or not y or not z then
+            return false, 'schema_validate_yank_victim_coords_invalid', { value = data.victimCoords }
+        end
+        if math.abs(x) > 100000 or math.abs(y) > 100000 or z < -2000 or z > 5000 then
+            return false, 'schema_validate_yank_victim_coords_out_of_bounds', { x = x, y = y, z = z }
+        end
     end
 
     return true, nil, nil
@@ -1181,10 +1226,9 @@ local _GuardCoreDefaultSchemas = {
         validate = _ValidateSyncWeaponsPayload
     },
     ['lyxguard:validateYank'] = {
-        minArgs = 2,
-        maxArgs = 2,
-        types = { [1] = 'number', [2] = { 'table', 'nil' } },
-        numberRanges = { [1] = { integer = true, min = 1, max = 4096 } },
+        minArgs = 1,
+        maxArgs = 1,
+        types = { [1] = 'table' },
         validate = _ValidateYankPayload
     },
 }
@@ -1248,7 +1292,7 @@ local function _SchemaTypeMatches(value, expected)
 end
 
 local function _HasSecurityEnvelopeArg(value)
-    return type(value) == 'table' and type(value.__lyxsec) == 'table'
+    return type(value) == 'table' and (type(value.__lyxsec) == 'table' or type(value.__lyxbridge) == 'table')
 end
 
 local function _GetEffectiveArgCount(eventData)

@@ -1,10 +1,10 @@
-﻿--[[
+--[[
     ╔═══════════════════════════════════════════════════════════════════════════════╗
     ║                           LYXGUARD v4.0 PROFESSIONAL                         ║
     ║                         Modular Detection Core                                ║
     ╠═══════════════════════════════════════════════════════════════════════════════╣
     ║  Author: LyxDev                                                               ║
-    ║  License: Commercial                                                          ║
+    ║  License: MIT                                                                 ║
     ║  Purpose: Client-side detection API and helper utilities                      ║
     ║                                                                               ║
     ║  USAGE: To add a new detection, create a file in client/detections/          ║

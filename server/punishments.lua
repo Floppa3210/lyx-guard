@@ -1,4 +1,4 @@
-﻿--[[
+--[[
     LyxGuard v4.0 - Punishment System
 
     Author: LyxDev

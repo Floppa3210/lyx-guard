@@ -1,4 +1,4 @@
-﻿--[[
+--[[
     LyxGuard v4.0 - Client Panel Handler
     NUI communication for anticheat panel
 ]]
@@ -10,6 +10,17 @@ local panelSecurity = {
     nonceCounter = 0,
 }
 local _randSeeded = false
+
+local function _GetSecurityTimestampMs()
+    if type(GetCloudTimeAsInt) == 'function' then
+        local ok, cloudTime = pcall(GetCloudTimeAsInt)
+        cloudTime = tonumber(cloudTime)
+        if ok and cloudTime and cloudTime > 0 then
+            return cloudTime * 1000
+        end
+    end
+    return 0
+end
 
 local function _SetPanelSecurity(sec)
     if type(sec) ~= 'table' then
@@ -46,7 +57,7 @@ local function _GenerateSecurityEnvelope(eventName)
             token = panelSecurity.token,
             nonce = nonce,
             correlation_id = correlationId,
-            ts = os.time() * 1000,
+            ts = _GetSecurityTimestampMs(),
             event = tostring(eventName or '')
         }
     }

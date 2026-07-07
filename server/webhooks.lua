@@ -1,10 +1,10 @@
-﻿--[[
+--[[
     
                                LYXGUARD v4.0 PROFESSIONAL                         
                                 Discord Webhooks                                   
     
       Author: LyxDev                                                               
-      License: Commercial                                                          
+      License: MIT
       Purpose: Discord webhook integration for notifications and logging          
     
 ]]

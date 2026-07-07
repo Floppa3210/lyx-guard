@@ -5,16 +5,63 @@
 
 -- ESX is provided by @es_extended/imports.lua; keep a bounded fallback via bootstrap.
 ESX = ESX or _G.ESX
-if not ESX and LyxGuard and LyxGuard.WaitForESX then
-    ESX = LyxGuard.WaitForESX(15000)
+local _PendingESXCallbacks = {}
+local _CallbacksFlushed = false
+
+local function _ResolveESX(timeoutMs)
+    if ESX then return ESX end
+
+    if LyxGuard and LyxGuard.WaitForESX then
+        ESX = LyxGuard.WaitForESX(timeoutMs or 15000)
+    end
+
+    ESX = ESX or _G.ESX
+    if ESX then
+        _G.ESX = _G.ESX or ESX
+    end
+    return ESX
 end
 
-if not ESX then
-    print('^1[LyxGuard]^7 admin_config: ESX no disponible (timeout). Callbacks no registrados.')
-    return
+local function RegisterESXCallback(name, handler)
+    if ESX and _CallbacksFlushed then
+        ESX.RegisterServerCallback(name, handler)
+        return
+    end
+
+    _PendingESXCallbacks[#_PendingESXCallbacks + 1] = {
+        name = name,
+        handler = handler
+    }
 end
 
-_G.ESX = _G.ESX or ESX
+CreateThread(function()
+    local resolved = _ResolveESX(15000)
+    if not resolved then
+        print('^3[LyxGuard]^7 admin_config: ESX no disponible (timeout inicial). Reintentando cada 2s...')
+        while not resolved do
+            Wait(2000)
+            if LyxGuard and LyxGuard.GetESX then
+                resolved = LyxGuard.GetESX()
+            end
+            if not resolved then
+                resolved = _ResolveESX(2000)
+            end
+        end
+        print('^2[LyxGuard]^7 admin_config: ESX detectado tras reintento. Registrando callbacks.')
+    end
+
+    ESX = resolved
+    _G.ESX = _G.ESX or ESX
+
+    if not _CallbacksFlushed then
+        for i = 1, #_PendingESXCallbacks do
+            local entry = _PendingESXCallbacks[i]
+            ESX.RegisterServerCallback(entry.name, entry.handler)
+        end
+        _PendingESXCallbacks = {}
+        _CallbacksFlushed = true
+    end
+end)
 
 -- Runtime configuration storage (overrides config.lua settings)
 local RuntimeConfig = {
@@ -27,7 +74,7 @@ local RuntimeConfig = {
 -- WHITELIST CALLBACKS
 -- ═══════════════════════════════════════════════════════════════════════════════
 
-ESX.RegisterServerCallback('lyxguard:panel:getWhitelist', function(source, cb)
+RegisterESXCallback('lyxguard:panel:getWhitelist', function(source, cb)
     local xPlayer = ESX.GetPlayerFromId(source)
     if not xPlayer then return cb({ whitelist = {} }) end
     
@@ -42,7 +89,7 @@ ESX.RegisterServerCallback('lyxguard:panel:getWhitelist', function(source, cb)
     end)
 end)
 
-ESX.RegisterServerCallback('lyxguard:panel:addToWhitelist', function(source, cb, data)
+RegisterESXCallback('lyxguard:panel:addToWhitelist', function(source, cb, data)
     local xPlayer = ESX.GetPlayerFromId(source)
     if not xPlayer then return cb({ success = false }) end
     
@@ -86,7 +133,7 @@ ESX.RegisterServerCallback('lyxguard:panel:addToWhitelist', function(source, cb,
     end)
 end)
 
-ESX.RegisterServerCallback('lyxguard:panel:removeFromWhitelist', function(source, cb, data)
+RegisterESXCallback('lyxguard:panel:removeFromWhitelist', function(source, cb, data)
     local xPlayer = ESX.GetPlayerFromId(source)
     if not xPlayer then return cb({ success = false }) end
     
@@ -116,7 +163,7 @@ end)
 -- IMMUNE GROUPS CALLBACKS
 -- ═══════════════════════════════════════════════════════════════════════════════
 
-ESX.RegisterServerCallback('lyxguard:panel:getImmuneGroups', function(source, cb)
+RegisterESXCallback('lyxguard:panel:getImmuneGroups', function(source, cb)
     local xPlayer = ESX.GetPlayerFromId(source)
     if not xPlayer then return cb({ groups = {} }) end
     
@@ -129,7 +176,7 @@ ESX.RegisterServerCallback('lyxguard:panel:getImmuneGroups', function(source, cb
     cb({ groups = groups })
 end)
 
-ESX.RegisterServerCallback('lyxguard:panel:saveImmuneGroups', function(source, cb, data)
+RegisterESXCallback('lyxguard:panel:saveImmuneGroups', function(source, cb, data)
     local xPlayer = ESX.GetPlayerFromId(source)
     if not xPlayer then return cb({ success = false }) end
     
@@ -162,7 +209,7 @@ end)
 -- VIP SETTINGS CALLBACKS
 -- ═══════════════════════════════════════════════════════════════════════════════
 
-ESX.RegisterServerCallback('lyxguard:panel:saveVipSettings', function(source, cb, data)
+RegisterESXCallback('lyxguard:panel:saveVipSettings', function(source, cb, data)
     local xPlayer = ESX.GetPlayerFromId(source)
     if not xPlayer then return cb({ success = false }) end
     
@@ -200,7 +247,7 @@ end)
 -- DETECTION SETTINGS CALLBACKS
 -- ═══════════════════════════════════════════════════════════════════════════════
 
-ESX.RegisterServerCallback('lyxguard:panel:getDetectionSettings', function(source, cb)
+RegisterESXCallback('lyxguard:panel:getDetectionSettings', function(source, cb)
     local xPlayer = ESX.GetPlayerFromId(source)
     if not xPlayer then return cb({ detections = {} }) end
     
@@ -263,7 +310,7 @@ ESX.RegisterServerCallback('lyxguard:panel:getDetectionSettings', function(sourc
     cb({ detections = detections })
 end)
 
-ESX.RegisterServerCallback('lyxguard:panel:saveDetectionSettings', function(source, cb, data)
+RegisterESXCallback('lyxguard:panel:saveDetectionSettings', function(source, cb, data)
     local xPlayer = ESX.GetPlayerFromId(source)
     if not xPlayer then return cb({ success = false }) end
     
@@ -308,7 +355,7 @@ ESX.RegisterServerCallback('lyxguard:panel:saveDetectionSettings', function(sour
     cb({ success = true })
 end)
 
-ESX.RegisterServerCallback('lyxguard:panel:resetDetectionDefaults', function(source, cb)
+RegisterESXCallback('lyxguard:panel:resetDetectionDefaults', function(source, cb)
     local xPlayer = ESX.GetPlayerFromId(source)
     if not xPlayer then return cb({ success = false }) end
     

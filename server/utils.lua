@@ -4,7 +4,7 @@
     ║                            Server Utilities                                   ║
     ╠═══════════════════════════════════════════════════════════════════════════════╣
     ║  Author: LyxDev                                                               ║
-    ║  License: Commercial                                                          ║
+    ║  License: MIT                                                                 ║
     ║  Purpose: Shared utility functions for server-side operations                ║
     ╚═══════════════════════════════════════════════════════════════════════════════╝
 ]]

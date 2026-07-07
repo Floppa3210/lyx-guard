@@ -10,6 +10,17 @@ local Protections = {}
 local IsInitialized = false
 local IsRunning = true
 
+local function _GetDetectionTimestamp()
+    if type(GetCloudTimeAsInt) == 'function' then
+        local ok, cloudTime = pcall(GetCloudTimeAsInt)
+        cloudTime = tonumber(cloudTime)
+        if ok and cloudTime and cloudTime > 0 then
+            return cloudTime
+        end
+    end
+    return math.floor((GetGameTimer() or 0) / 1000)
+end
+
 -- Detection callback - sends to server
 local function OnDetection(protectionName, details, action)
     print(('[^1LyxGuard^7] Detection: %s - %s (Action: %s)'):format(protectionName, details or '', action or 'WARN'))
@@ -19,7 +30,7 @@ local function OnDetection(protectionName, details, action)
         type = protectionName,
         details = details,
         action = action,
-        timestamp = os.time()
+        timestamp = _GetDetectionTimestamp()
     })
 end
 

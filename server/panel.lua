@@ -1,4 +1,4 @@
-﻿--[[
+--[[
     
                             LYXGUARD v4.0 - PANEL SERVER                           
                             Optimizado para ESX Legacy 1.9+                        
@@ -759,8 +759,18 @@ CreateThread(function()
     resolved = resolved or _G.ESX
 
     if not resolved then
-        print('^1[LyxGuard]^7 panel: ESX no disponible (timeout). Callbacks no registrados.')
-        return
+        print('^3[LyxGuard]^7 panel: ESX no disponible (timeout inicial). Reintentando cada 2s...')
+        while not resolved do
+            Wait(2000)
+            if LyxGuard and LyxGuard.GetESX then
+                resolved = LyxGuard.GetESX()
+            end
+            if not resolved and LyxGuard and LyxGuard.WaitForESX then
+                resolved = LyxGuard.WaitForESX(2000)
+            end
+            resolved = resolved or ESX or _G.ESX
+        end
+        print('^2[LyxGuard]^7 panel: ESX detectado tras reintento. Registrando callbacks.')
     end
 
     ESX = resolved

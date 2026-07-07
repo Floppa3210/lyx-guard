@@ -179,6 +179,70 @@ RegisterDetection('invisible', {
 end, 'periodic')
 
 -- ═══════════════════════════════════════════════════════════════════════════════
+-- 2b. INVISIBLE VEHICLE DETECTION
+-- La deteccion 'invisible' de arriba solo mira el PED. Los cheats de "vehiculo
+-- invisible" ocultan el vehiculo ocupado (visible=false o alpha bajo) mientras el
+-- jugador conduce. Aqui verificamos el vehiculo en si.
+-- ═══════════════════════════════════════════════════════════════════════════════
+
+local InvisibleVehicleState = {
+    count = 0
+}
+
+RegisterDetection('vehicle_invisible', {
+    enabled = true,
+    punishment = 'warn',
+    banDuration = 'medium',
+    tolerance = 3,
+    minAlpha = 50,
+    checkInterval = 3000
+}, function(config, state)
+    if Helpers and Helpers.IsPlayerImmune and Helpers.IsPlayerImmune() then return false end
+
+    -- Admin/spectate legitimo.
+    if LocalPlayer.state.isSpectating or LocalPlayer.state.adminInvisible then
+        InvisibleVehicleState.count = 0
+        return false
+    end
+
+    local ped = PlayerPedId()
+    if not IsPedInAnyVehicle(ped, false) then
+        InvisibleVehicleState.count = 0
+        return false
+    end
+
+    local veh = GetVehiclePedIsIn(ped, false)
+    if not veh or veh == 0 or not DoesEntityExist(veh) then
+        InvisibleVehicleState.count = 0
+        return false
+    end
+
+    local isVisible = IsEntityVisible(veh)
+    local alpha = GetEntityAlpha(veh)
+
+    -- Solo el conductor puede ocultar su propio vehiculo con este cheat; evitar
+    -- falsos positivos de vehiculos de otros aun no renderizados.
+    local isDriver = GetPedInVehicleSeat(veh, -1) == ped
+
+    if isDriver and ((not isVisible) or (alpha > 0 and alpha < (config.minAlpha or 50))) then
+        InvisibleVehicleState.count = InvisibleVehicleState.count + 1
+        if InvisibleVehicleState.count >= (config.tolerance or 3) then
+            InvisibleVehicleState.count = 0
+            return true, {
+                type = 'VEHICLE_INVISIBLE',
+                visible = isVisible,
+                alpha = alpha,
+                vehicleModel = GetEntityModel(veh)
+            }
+        end
+    else
+        InvisibleVehicleState.count = 0
+    end
+
+    return false
+end, 'periodic')
+
+-- ═══════════════════════════════════════════════════════════════════════════════
 -- 3. SUPER JUMP DETECTION
 -- Detects abnormally high jumps
 -- ═══════════════════════════════════════════════════════════════════════════════
