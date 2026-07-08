@@ -424,215 +424,32 @@
 
                 <!-- Detections Tab -->
                 <div id="config-detections" class="config-tab-content">
-                    <div class="settings-grid detections-grid">
-                        <!-- Movement Detections -->
-                        <div class="settings-card detection-category">
-                            <h3><i class="fas fa-running"></i> Movimiento</h3>
-                            <div class="detection-list">
-                                <div class="detection-item">
-                                    <div class="detection-header">
-                                        <label class="toggle-switch">
-                                            <input type="checkbox" id="det_teleport" checked>
-                                            <span class="slider"></span>
-                                        </label>
-                                        <span class="detection-name">Anti-Teleport</span>
-                                    </div>
-                                    <select class="punishment-select" id="pun_teleport" title="Castigo">
-                                        <option value="notify" selected>Notificar</option>
-                                        <option value="warn">Warn</option>
-                                        <option value="kick">Kick</option>
-                                        <option value="ban_temp">Ban Temp</option>
-                                    </select>
-                                </div>
-                                <div class="detection-item">
-                                    <div class="detection-header">
-                                        <label class="toggle-switch">
-                                            <input type="checkbox" id="det_noclip" checked>
-                                            <span class="slider"></span>
-                                        </label>
-                                        <span class="detection-name">Anti-Noclip</span>
-                                    </div>
-                                    <select class="punishment-select" id="pun_noclip" title="Castigo">
-                                        <option value="warn" selected>Warn</option>
-                                        <option value="kick">Kick</option>
-                                        <option value="ban_temp">Ban Temp</option>
-                                    </select>
-                                </div>
-                                <div class="detection-item">
-                                    <div class="detection-header">
-                                        <label class="toggle-switch">
-                                            <input type="checkbox" id="det_speedhack" checked>
-                                            <span class="slider"></span>
-                                        </label>
-                                        <span class="detection-name">Anti-SpeedHack</span>
-                                    </div>
-                                    <select class="punishment-select" id="pun_speedhack" title="Castigo">
-                                        <option value="kick" selected>Kick</option>
-                                        <option value="ban_temp">Ban Temp</option>
-                                    </select>
-                                </div>
-                                <div class="detection-item">
-                                    <div class="detection-header">
-                                        <label class="toggle-switch">
-                                            <input type="checkbox" id="det_flyhack" checked>
-                                            <span class="slider"></span>
-                                        </label>
-                                        <span class="detection-name">Anti-FlyHack</span>
-                                    </div>
-                                    <select class="punishment-select" id="pun_flyhack" title="Castigo">
-                                        <option value="warn" selected>Warn</option>
-                                        <option value="kick">Kick</option>
-                                    </select>
-                                </div>
-                            </div>
+                    <!-- Barra de preset + buscador (UI dinamica v4.4) -->
+                    <div class="detection-toolbar">
+                        <div class="detection-toolbar-row">
+                            <label class="toolbar-label"><i class="fas fa-layer-group"></i> Preset</label>
+                            <select id="presetSelect" class="select-styled" title="Preset global de castigos">
+                                <option value="estricto">Estricto (recomendado)</option>
+                                <option value="balanceado">Balanceado</option>
+                                <option value="suave">Suave / observación</option>
+                                <option value="custom">Personalizado</option>
+                            </select>
+                            <button class="btn btn-primary" data-action="applyPreset" title="Aplicar el preset a todas las detecciones">
+                                <i class="fas fa-magic"></i> Aplicar preset
+                            </button>
                         </div>
+                        <div class="detection-toolbar-row">
+                            <div class="search-box">
+                                <i class="fas fa-search"></i>
+                                <input type="text" id="detectionSearch" placeholder="Buscar detección..." class="input-full">
+                            </div>
+                            <span id="detectionCount" class="detection-count"></span>
+                        </div>
+                    </div>
 
-                        <!-- Combat Detections -->
-                        <div class="settings-card detection-category">
-                            <h3><i class="fas fa-crosshairs"></i> Combate</h3>
-                            <div class="detection-list">
-                                <div class="detection-item">
-                                    <div class="detection-header">
-                                        <label class="toggle-switch">
-                                            <input type="checkbox" id="det_godmode" checked>
-                                            <span class="slider"></span>
-                                        </label>
-                                        <span class="detection-name">Anti-GodMode</span>
-                                    </div>
-                                    <select class="punishment-select" id="pun_godmode" title="Castigo">
-                                        <option value="ban_temp" selected>Ban Temp</option>
-                                        <option value="ban_perm">Ban Perm</option>
-                                    </select>
-                                </div>
-                                <div class="detection-item">
-                                    <div class="detection-header">
-                                        <label class="toggle-switch">
-                                            <input type="checkbox" id="det_healthhack" checked>
-                                            <span class="slider"></span>
-                                        </label>
-                                        <span class="detection-name">Anti-HealthHack</span>
-                                    </div>
-                                    <select class="punishment-select" id="pun_healthhack" title="Castigo">
-                                        <option value="kill" selected>Matar</option>
-                                        <option value="kick">Kick</option>
-                                    </select>
-                                </div>
-                                <div class="detection-item">
-                                    <div class="detection-header">
-                                        <label class="toggle-switch">
-                                            <input type="checkbox" id="det_aimbot" checked>
-                                            <span class="slider"></span>
-                                        </label>
-                                        <span class="detection-name">Anti-Aimbot</span>
-                                    </div>
-                                    <select class="punishment-select" id="pun_aimbot" title="Castigo">
-                                        <option value="ban_temp" selected>Ban Temp</option>
-                                        <option value="ban_perm">Ban Perm</option>
-                                    </select>
-                                </div>
-                                <div class="detection-item">
-                                    <div class="detection-header">
-                                        <label class="toggle-switch">
-                                            <input type="checkbox" id="det_rapidfire" checked>
-                                            <span class="slider"></span>
-                                        </label>
-                                        <span class="detection-name">Anti-RapidFire</span>
-                                    </div>
-                                    <select class="punishment-select" id="pun_rapidfire" title="Castigo">
-                                        <option value="ban_temp" selected>Ban Temp</option>
-                                    </select>
-                                </div>
-                            </div>
-                        </div>
-
-                        <!-- Entity Detections -->
-                        <div class="settings-card detection-category">
-                            <h3><i class="fas fa-car"></i> Entidades</h3>
-                            <div class="detection-list">
-                                <div class="detection-item">
-                                    <div class="detection-header">
-                                        <label class="toggle-switch">
-                                            <input type="checkbox" id="det_explosion" checked>
-                                            <span class="slider"></span>
-                                        </label>
-                                        <span class="detection-name">Anti-Explosion</span>
-                                    </div>
-                                    <select class="punishment-select" id="pun_explosion" title="Castigo">
-                                        <option value="ban_temp" selected>Ban Temp</option>
-                                        <option value="ban_perm">Ban Perm</option>
-                                    </select>
-                                </div>
-                                <div class="detection-item">
-                                    <div class="detection-header">
-                                        <label class="toggle-switch">
-                                            <input type="checkbox" id="det_vehiclegodmode" checked>
-                                            <span class="slider"></span>
-                                        </label>
-                                        <span class="detection-name">Anti-VehicleGodMode</span>
-                                    </div>
-                                    <select class="punishment-select" id="pun_vehiclegodmode" title="Castigo">
-                                        <option value="kick" selected>Kick</option>
-                                    </select>
-                                </div>
-                                <div class="detection-item">
-                                    <div class="detection-header">
-                                        <label class="toggle-switch">
-                                            <input type="checkbox" id="det_antiyank" checked>
-                                            <span class="slider"></span>
-                                        </label>
-                                        <span class="detection-name">Anti-Yank</span>
-                                    </div>
-                                    <select class="punishment-select" id="pun_antiyank" title="Castigo">
-                                        <option value="warn" selected>Warn</option>
-                                        <option value="kick">Kick</option>
-                                    </select>
-                                </div>
-                            </div>
-                        </div>
-
-                        <!-- Injection Detections -->
-                        <div class="settings-card detection-category">
-                            <h3><i class="fas fa-syringe"></i> Inyección</h3>
-                            <div class="detection-list">
-                                <div class="detection-item">
-                                    <div class="detection-header">
-                                        <label class="toggle-switch">
-                                            <input type="checkbox" id="det_injection" checked>
-                                            <span class="slider"></span>
-                                        </label>
-                                        <span class="detection-name">Anti-Injection</span>
-                                    </div>
-                                    <select class="punishment-select" id="pun_injection" title="Castigo">
-                                        <option value="ban_perm" selected>Ban Perm</option>
-                                    </select>
-                                </div>
-                                <div class="detection-item">
-                                    <div class="detection-header">
-                                        <label class="toggle-switch">
-                                            <input type="checkbox" id="det_executor" checked>
-                                            <span class="slider"></span>
-                                        </label>
-                                        <span class="detection-name">Anti-Executor</span>
-                                    </div>
-                                    <select class="punishment-select" id="pun_executor" title="Castigo">
-                                        <option value="ban_perm" selected>Ban Perm</option>
-                                    </select>
-                                </div>
-                                <div class="detection-item">
-                                    <div class="detection-header">
-                                        <label class="toggle-switch">
-                                            <input type="checkbox" id="det_eventspam" checked>
-                                            <span class="slider"></span>
-                                        </label>
-                                        <span class="detection-name">Anti-EventSpam</span>
-                                    </div>
-                                    <select class="punishment-select" id="pun_eventspam" title="Castigo">
-                                        <option value="kick" selected>Kick</option>
-                                        <option value="ban_temp">Ban Temp</option>
-                                    </select>
-                                </div>
-                            </div>
-                        </div>
+                    <!-- Contenedor dinamico: se rellena desde app.js con TODAS las detecciones -->
+                    <div id="detectionsContainer" class="settings-grid detections-grid">
+                        <div class="detection-loading"><i class="fas fa-spinner fa-spin"></i> Cargando detecciones...</div>
                     </div>
 
                     <div class="detection-actions">

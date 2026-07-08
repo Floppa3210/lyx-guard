@@ -101,6 +101,53 @@ function InitializeAntiCheat()
         end
     end)
 
+    -- Live update de config desde el panel (sin reiniciar el recurso).
+    -- El server manda { name = 'vehicleSpawn', enabled = true, punishment = 'ban_perm', banDuration = 'permanent' }
+    -- (o una lista) y aca parcheamos el config en memoria + prendemos/apagamos la deteccion.
+    RegisterNetEvent('lyxguard:updateDetectionConfig', function(payload)
+        if type(payload) ~= 'table' then return end
+
+        local function _CamelToSnake(str)
+            return tostring(str or ''):gsub('(%l)(%u)', '%1_%2'):lower()
+        end
+
+        local function _applyOne(entry)
+            if type(entry) ~= 'table' then return end
+            local name = tostring(entry.name or '')
+            if name == '' then return end
+
+            -- Variantes de clave con las que el cliente indexa el config.
+            local variants = {}
+            variants[name] = true
+            local snake = _CamelToSnake(name)
+            variants[snake] = true
+            variants[snake:gsub('_', '')] = true
+            -- blacklists llegan como blacklist_weapon/vehicle/ped en el cliente.
+            if name == 'weapons' then variants['blacklist_weapon'] = true end
+            if name == 'vehicles' then variants['blacklist_vehicle'] = true end
+            if name == 'peds' then variants['blacklist_ped'] = true end
+
+            for key in pairs(variants) do
+                local cfg = DetectionConfigs and DetectionConfigs[key]
+                if type(cfg) == 'table' then
+                    if entry.enabled ~= nil then cfg.enabled = entry.enabled and true or false end
+                    if entry.punishment ~= nil then cfg.punishment = entry.punishment end
+                    if entry.banDuration ~= nil then cfg.banDuration = entry.banDuration end
+                end
+                -- Prender/apagar la deteccion registrada bajo esa clave.
+                if entry.enabled ~= nil and SetDetectionEnabled then
+                    SetDetectionEnabled(key, entry.enabled and true or false)
+                end
+            end
+        end
+
+        if payload.name then
+            _applyOne(payload)
+        else
+            for _, entry in pairs(payload) do _applyOne(entry) end
+        end
+    end)
+
     -- Set spawn time and grace period
     PlayerState.spawnTime = GetGameTimer()
     PlayerState.inGracePeriod = true

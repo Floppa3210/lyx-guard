@@ -7,7 +7,7 @@ lua54 'yes'
 name 'lyx-guard'
 author 'LyxDevelopment'
 description 'Anticheat modular con panel y telemetria avanzada'
-version '4.0.1'
+version '4.4.0'
 
 ui_page 'html/index.html'
 
@@ -26,6 +26,7 @@ files {
 shared_scripts {
     '@es_extended/imports.lua',
     'config.lua',
+    'config_easy.lua', -- Se carga DESPUES de config.lua: aplica presets + on/off encima.
     'shared/sha2.lua',
     'shared/*.lua'
 }

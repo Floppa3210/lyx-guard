@@ -1,5 +1,36 @@
 # Changelog — LyxGuard
 
+## v4.4 — Configuración fácil, presets y panel dinámico
+
+Objetivo: que cualquiera pueda configurar el AC sin miedo. Configuración simple y
+mayormente booleana, presets con defaults sensatos y un panel que edita TODAS las
+detecciones en vivo. Todo aditivo: no rompe `config.lua` ni el pipeline server.
+
+### Configuración fácil (`config_easy.lua`)
+- Nuevo archivo boolean-first y documentado en español. Se carga después de `config.lua`
+  y solo ajusta `enabled` + `punishment`/`banDuration` de cada detección según un preset.
+- `Config.Preset`: `estricto` (default), `balanceado`, `suave`, `custom`, `manual`.
+- `Config.Easy`: un `true/false` por detección (prende/apaga).
+- `Config.CustomPreset`: el usuario decide el castigo de cada detección (fallback = estricto).
+- Clasificación interna por severidad (blatant/severe/medium/minor) → cada preset asigna
+  el castigo por clase. Cheat claro (spawn vehículo/arma, aimbot, injection, godmode,
+  modelExploit, honeypots) = **ban permanente** en estricto. `moneyExploit` off por defecto.
+- La lógica de presets se expone como `LyxGuardEasy` para reutilizarla desde el panel.
+
+### Panel dinámico (todas las detecciones)
+- La página de detecciones ya no está hardcoded a 14: se genera dinámicamente desde el
+  servidor con TODAS las detecciones, agrupadas (Movimiento/Combate/Ultra/Entidades/
+  Avanzado/Listas negras), con toggle + castigo, buscador y contador de activas.
+- Selector de preset + botón "Aplicar preset" que setea los castigos de golpe.
+- Nuevos callbacks: `getAllDetections`, `getPresetPunishments` (+ bridges NUI).
+
+### Persistencia + aplicación en vivo
+- `Config.PanelPersistence`: `database` (default), `json` u `off`.
+- Migración v4: tablas `lyxguard_config_overrides` y `lyxguard_config_meta`.
+- Los cambios del panel se persisten y se **re-envían a los clientes conectados**
+  (`lyxguard:updateDetectionConfig`) para aplicarse sin reiniciar el recurso.
+- Al arrancar, los overrides persistidos se cargan y aplican automáticamente.
+
 ## v4.3 — Unificacion del client-side de detecciones
 
 Objetivo: consolidar el client-side en un unico framework, eliminar duplicacion y

@@ -3,6 +3,46 @@
 Este documento resume las opciones mas importantes de `config.lua` y sus defaults "stock".
 LyxGuard tiene muchas opciones; este archivo prioriza las que afectan seguridad, falsos positivos y operacion.
 
+## 0) Configuración fácil (`config_easy.lua`) — EMPEZÁ ACÁ
+
+A partir de v4.4 hay un archivo simple pensado para configurar el AC sin miedo:
+`config_easy.lua`. Se carga **después** de `config.lua` y solo cambia si cada detección
+está activada y qué castigo aplica, según un preset. Todo lo técnico (umbrales, listas,
+intervalos) sigue en `config.lua`.
+
+**1. Preset global** — `Config.Preset`:
+- `'estricto'` (default, recomendado): cheat claro = **ban permanente**. Mano dura.
+- `'balanceado'`: cheat grave = ban temporal largo. Menos riesgo de falsos bans.
+- `'suave'`: todo en aviso/warn, cero ban automático (modo observación/calibración).
+- `'custom'`: vos decidís el castigo de cada detección en `Config.CustomPreset`.
+- `'manual'`: no toca castigos; usa los de `config.lua` tal cual.
+
+**2. Interruptores** — `Config.Easy`: un `true/false` por detección (prende/apaga).
+
+**3. Preset personalizado** — `Config.CustomPreset` (solo si `Config.Preset='custom'`):
+```lua
+Config.CustomPreset = {
+    vehicleSpawn = { punishment = 'ban_perm' },
+    speedHack    = { punishment = 'kick' },
+    teleport     = { punishment = 'ban_temp', banDuration = 'medium' },
+}
+```
+Lo que no definas usa el preset `estricto` como respaldo.
+
+**4. Persistencia del panel** — `Config.PanelPersistence`:
+- `'database'` (default, recomendado): guarda los cambios del panel en MySQL (sobreviven reinicios).
+- `'json'`: guarda en `overrides.json` dentro del recurso.
+- `'off'`: cambios del panel temporales (se pierden al reiniciar).
+
+**Defaults preconfigurados (preset estricto):** spawn de vehículo/arma ilegal, aimbot,
+injection/executor, godmode, modelExploit y honeypots → **ban permanente**. `moneyExploit`
+viene apagado (la autoridad económica real es server-side). Heurísticas con posible ruido
+(underground, noProps, antiTaser…) → warn, para evitar bans por falso positivo.
+
+> El panel de admin (página *Configuración de Admin → Detecciones*) permite editar TODAS las
+> detecciones en vivo, elegir preset y guardar. Los cambios se aplican a los jugadores
+> conectados sin reiniciar y se persisten según `Config.PanelPersistence`.
+
 ## 1) General
 - `Config.Debug` (default: `false`)
 - `Config.Locale` (default: `es`)

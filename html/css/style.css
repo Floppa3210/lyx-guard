@@ -1380,6 +1380,67 @@ body {
   border: 1px solid var(--border-color);
 }
 
+/* Detection toolbar (preset + buscador) — UI dinamica v4.4 */
+.detection-toolbar {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-bottom: 20px;
+  padding: 16px 20px;
+  background: var(--bg-card);
+  border-radius: var(--radius);
+  border: 1px solid var(--border-color);
+}
+.detection-toolbar-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.detection-toolbar .toolbar-label {
+  font-weight: 600;
+  color: var(--text-muted);
+  min-width: 70px;
+}
+.detection-toolbar .search-box {
+  position: relative;
+  flex: 1;
+  min-width: 200px;
+  display: flex;
+  align-items: center;
+}
+.detection-toolbar .search-box i {
+  position: absolute;
+  left: 12px;
+  color: var(--text-muted);
+  pointer-events: none;
+}
+.detection-toolbar .search-box input {
+  padding-left: 34px;
+}
+.detection-count {
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+.cat-count {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  background: rgba(255, 255, 255, 0.06);
+  border-radius: 10px;
+  padding: 1px 8px;
+  margin-left: 6px;
+}
+.detection-loading {
+  grid-column: 1 / -1;
+  text-align: center;
+  padding: 40px;
+  color: var(--text-muted);
+}
+.detection-loading i {
+  margin-right: 8px;
+}
+
 /* Setting Description */
 .setting-description {
   font-size: 0.85rem;

@@ -317,4 +317,17 @@ RegisterNUICallback('resetDetectionDefaults', function(data, cb)
     end)
 end)
 
+-- UI dinamica v4.4: lista completa de detecciones + castigos de un preset.
+RegisterNUICallback('getAllDetections', function(data, cb)
+    ESX.TriggerServerCallback('lyxguard:panel:getAllDetections', function(result)
+        cb(result or { detections = {} })
+    end)
+end)
+
+RegisterNUICallback('getPresetPunishments', function(data, cb)
+    ESX.TriggerServerCallback('lyxguard:panel:getPresetPunishments', function(result)
+        cb(result or { punishments = {} })
+    end, data)
+end)
+
 print('[LyxGuard] Panel client module loaded')

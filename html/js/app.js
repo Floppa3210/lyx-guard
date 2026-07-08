@@ -1025,60 +1025,200 @@ function saveVipSettings() {
 }
 
 // -------------------------------------------------------------------------------
-// DETECTION SETTINGS
+// DETECTION SETTINGS (UI dinamica v4.4 - cubre TODAS las detecciones)
 // -------------------------------------------------------------------------------
 
-function loadDetectionSettings() {
-    post('getDetectionSettings').then(data => {
-        if (!data.detections) return;
+// Opciones de castigo que se ofrecen en cada select.
+const PUNISHMENT_OPTIONS = [
+    { value: 'none', label: 'Ninguno' },
+    { value: 'notify', label: 'Notificar' },
+    { value: 'screenshot', label: 'Captura' },
+    { value: 'warn', label: 'Warn' },
+    { value: 'kick', label: 'Kick' },
+    { value: 'ban_temp', label: 'Ban Temp' },
+    { value: 'ban_perm', label: 'Ban Perm' },
+    { value: 'teleport', label: 'Teleport' },
+    { value: 'freeze', label: 'Freeze' },
+    { value: 'kill', label: 'Matar' }
+];
 
-        Object.keys(data.detections).forEach(detection => {
-            const det = data.detections[detection];
-            const enabledCb = document.getElementById('det_' + detection);
-            const punishmentSelect = document.getElementById('pun_' + detection);
+// Etiqueta legible para cada grupo devuelto por el server.
+const GROUP_LABELS = {
+    Movement: 'Movimiento',
+    Combat: 'Combate',
+    Ultra: 'Exploits / Ultra',
+    Entities: 'Entidades',
+    Advanced: 'Avanzado / Inyección',
+    Blacklists: 'Listas negras'
+};
 
-            if (enabledCb && det.enabled !== undefined) {
-                enabledCb.checked = det.enabled;
-            }
-            if (punishmentSelect && det.punishment) {
-                punishmentSelect.value = det.punishment;
-            }
+const GROUP_ICONS = {
+    Movement: 'fa-running',
+    Combat: 'fa-crosshairs',
+    Ultra: 'fa-bolt',
+    Entities: 'fa-car',
+    Advanced: 'fa-syringe',
+    Blacklists: 'fa-ban'
+};
+
+// Estado en memoria de las detecciones cargadas (lista plana).
+let DetectionState = [];
+
+function _punishmentSelectHTML(name, selected) {
+    const opts = PUNISHMENT_OPTIONS.map(o =>
+        `<option value="${o.value}"${o.value === selected ? ' selected' : ''}>${o.label}</option>`
+    ).join('');
+    return `<select class="punishment-select" id="pun_${esc(name)}" title="Castigo">${opts}</select>`;
+}
+
+function renderDetections() {
+    const container = document.getElementById('detectionsContainer');
+    if (!container) return;
+
+    if (!DetectionState.length) {
+        container.innerHTML = '<div class="detection-loading">No hay detecciones para mostrar.</div>';
+        return;
+    }
+
+    // Agrupar por grupo respetando el orden de GROUP_LABELS.
+    const groups = {};
+    DetectionState.forEach(det => {
+        (groups[det.group] = groups[det.group] || []).push(det);
+    });
+
+    const order = Object.keys(GROUP_LABELS).filter(g => groups[g]);
+    // Cualquier grupo no listado va al final.
+    Object.keys(groups).forEach(g => { if (!order.includes(g)) order.push(g); });
+
+    let html = '';
+    order.forEach(group => {
+        const items = groups[group].slice().sort((a, b) => a.label.localeCompare(b.label));
+        const icon = GROUP_ICONS[group] || 'fa-shield-alt';
+        const title = GROUP_LABELS[group] || group;
+        html += `<div class="settings-card detection-category" data-group="${esc(group)}">
+            <h3><i class="fas ${icon}"></i> ${esc(title)} <span class="cat-count">${items.length}</span></h3>
+            <div class="detection-list">`;
+        items.forEach(det => {
+            html += `<div class="detection-item" data-detection="${esc(det.name)}" data-search="${esc((det.label + ' ' + det.name).toLowerCase())}">
+                <div class="detection-header">
+                    <label class="toggle-switch">
+                        <input type="checkbox" id="det_${esc(det.name)}"${det.enabled ? ' checked' : ''}>
+                        <span class="slider"></span>
+                    </label>
+                    <span class="detection-name">${esc(det.label)}</span>
+                </div>
+                ${_punishmentSelectHTML(det.name, det.punishment)}
+            </div>`;
         });
+        html += `</div></div>`;
+    });
+
+    container.innerHTML = html;
+    updateDetectionCount();
+}
+
+function updateDetectionCount() {
+    const el = document.getElementById('detectionCount');
+    if (!el) return;
+    let enabled = 0;
+    DetectionState.forEach(d => {
+        const cb = document.getElementById('det_' + d.name);
+        if (cb && cb.checked) enabled++;
+    });
+    el.textContent = `${enabled}/${DetectionState.length} activas`;
+}
+
+function loadDetectionSettings() {
+    post('getAllDetections').then(data => {
+        DetectionState = Array.isArray(data.detections) ? data.detections : [];
+        // Reflejar el preset activo en el selector, si viene.
+        if (data.preset) {
+            const sel = document.getElementById('presetSelect');
+            if (sel) sel.value = data.preset;
+        }
+        renderDetections();
     });
 }
 
 function saveDetectionSettings() {
     const detections = {};
-    const detectionIds = [
-        'teleport', 'noclip', 'speedhack', 'flyhack',
-        'godmode', 'healthhack', 'aimbot', 'rapidfire',
-        'explosion', 'vehiclegodmode', 'antiyank',
-        'injection', 'executor', 'eventspam'
-    ];
-
-    detectionIds.forEach(detection => {
-        const enabledCb = document.getElementById('det_' + detection);
-        const punishmentSelect = document.getElementById('pun_' + detection);
-
-        if (enabledCb) {
-            detections[detection] = {
-                enabled: enabledCb.checked,
-                punishment: punishmentSelect ? punishmentSelect.value : 'notify'
+    DetectionState.forEach(det => {
+        const cb = document.getElementById('det_' + det.name);
+        const pun = document.getElementById('pun_' + det.name);
+        if (cb) {
+            detections[det.name] = {
+                enabled: cb.checked,
+                punishment: pun ? pun.value : (det.punishment || 'notify')
             };
         }
     });
 
-    post('saveDetectionSettings', { detections: detections }).then(response => {
+    const presetSel = document.getElementById('presetSelect');
+    post('saveDetectionSettings', {
+        detections: detections,
+        preset: presetSel ? presetSel.value : undefined
+    }).then(response => {
         if (response.success) {
             showToast('success', 'Configuración de detecciones guardada');
+            // Sincronizar estado local con lo guardado.
+            DetectionState.forEach(det => {
+                if (detections[det.name]) {
+                    det.enabled = detections[det.name].enabled;
+                    det.punishment = detections[det.name].punishment;
+                }
+            });
+            updateDetectionCount();
         } else {
             showToast('error', response.message || 'Error al guardar');
         }
     });
 }
 
+// Aplica un preset del servidor a todos los selects visibles (sin guardar aún).
+function applyPreset() {
+    const presetSel = document.getElementById('presetSelect');
+    if (!presetSel) return;
+    const preset = presetSel.value;
+
+    if (preset === 'custom') {
+        showToast('info', 'Modo personalizado: ajustá cada castigo a mano y guardá.');
+        return;
+    }
+
+    post('getPresetPunishments', { preset: preset }).then(data => {
+        if (!data || !data.punishments) {
+            showToast('error', 'No se pudo obtener el preset');
+            return;
+        }
+        DetectionState.forEach(det => {
+            const p = data.punishments[det.name];
+            if (p && p.punishment) {
+                const punSel = document.getElementById('pun_' + det.name);
+                if (punSel) punSel.value = p.punishment;
+            }
+        });
+        showToast('success', `Preset "${preset}" aplicado. Revisá y guardá para confirmar.`);
+    });
+}
+
+function filterDetectionList() {
+    const input = document.getElementById('detectionSearch');
+    if (!input) return;
+    const q = input.value.trim().toLowerCase();
+    document.querySelectorAll('#detectionsContainer .detection-item').forEach(item => {
+        const hay = item.dataset.search || '';
+        item.style.display = (!q || hay.includes(q)) ? '' : 'none';
+    });
+    // Ocultar categorías que quedaron vacías.
+    document.querySelectorAll('#detectionsContainer .detection-category').forEach(cat => {
+        const anyVisible = Array.from(cat.querySelectorAll('.detection-item'))
+            .some(i => i.style.display !== 'none');
+        cat.style.display = anyVisible ? '' : 'none';
+    });
+}
+
 function resetDetectionDefaults() {
-    showConfirm('Restaurar Valores', '¿Restaurar todas las detecciones a valores por defecto?', () => {
+    showConfirm('Restaurar Valores', '¿Restaurar todas las detecciones a los valores del preset por defecto?', () => {
         post('resetDetectionDefaults').then(response => {
             if (response.success) {
                 showToast('success', 'Valores restaurados');
@@ -1131,6 +1271,7 @@ const UiActionHandlers = {
     saveVipSettings: () => saveVipSettings(),
     saveDetectionSettings: () => saveDetectionSettings(),
     resetDetectionDefaults: () => resetDetectionDefaults(),
+    applyPreset: () => applyPreset(),
     saveWebhooks: () => saveWebhooks(),
     clearPlayerLogs: () => clearPlayerLogs(),
     clearOldLogs: () => clearOldLogs(),
@@ -1176,4 +1317,18 @@ document.addEventListener('change', function(e) {
     if (typeof handler !== 'function') return;
 
     handler(changeEl, e);
+});
+
+// Buscador en vivo de detecciones (UI dinamica v4.4).
+document.addEventListener('input', function(e) {
+    if (e.target && e.target.id === 'detectionSearch') {
+        filterDetectionList();
+    }
+});
+
+// Mantener el contador "activas" al togglear una detección.
+document.addEventListener('change', function(e) {
+    if (e.target && e.target.id && e.target.id.indexOf('det_') === 0) {
+        if (typeof updateDetectionCount === 'function') updateDetectionCount();
+    }
 });

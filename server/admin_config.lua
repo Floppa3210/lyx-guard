@@ -244,132 +244,344 @@ RegisterESXCallback('lyxguard:panel:saveVipSettings', function(source, cb, data)
 end)
 
 -- ═══════════════════════════════════════════════════════════════════════════════
--- DETECTION SETTINGS CALLBACKS
+-- DETECTION SETTINGS CALLBACKS  (UI dinamica + persistencia v4.4)
 -- ═══════════════════════════════════════════════════════════════════════════════
 
+-- Secciones de Config donde viven las detecciones y su grupo "logico" para el panel.
+local DETECTION_SECTIONS = {
+    { key = 'Movement',   group = 'Movement',   clientPrefix = '' },
+    { key = 'Combat',     group = 'Combat',     clientPrefix = '' },
+    { key = 'Ultra',      group = 'Ultra',      clientPrefix = '' },
+    { key = 'Entities',   group = 'Entities',   clientPrefix = '' },
+    { key = 'Advanced',   group = 'Advanced',   clientPrefix = '' },
+    { key = 'Blacklists', group = 'Blacklists', clientPrefix = '' },
+}
+
+-- Convierte camelCase / snake a etiqueta legible: "vehicleSpawn" -> "Vehicle Spawn".
+local function _Humanize(name)
+    local s = tostring(name or '')
+    s = s:gsub('_', ' ')
+    s = s:gsub('(%l)(%u)', '%1 %2')
+    s = s:gsub('^%l', string.upper)
+    return s
+end
+
+-- Devuelve la seccion (tabla Config) y el descriptor donde vive una deteccion.
+local function _FindDetectionSection(name)
+    for _, sec in ipairs(DETECTION_SECTIONS) do
+        local t = Config and Config[sec.key]
+        if type(t) == 'table' and type(t[name]) == 'table' and t[name].enabled ~= nil then
+            return t[name], sec
+        end
+    end
+    return nil, nil
+end
+
+-- ── PERSISTENCIA ──────────────────────────────────────────────────────────────
+local function _PersistMode()
+    local m = tostring((Config and Config.PanelPersistence) or 'database'):lower()
+    if m ~= 'database' and m ~= 'json' and m ~= 'off' then m = 'database' end
+    return m
+end
+
+local OVERRIDES_JSON = 'overrides.json'
+
+local function _JsonRead()
+    local raw = LoadResourceFile(GetCurrentResourceName(), OVERRIDES_JSON)
+    if not raw or raw == '' then return {} end
+    local ok, data = pcall(json.decode, raw)
+    if ok and type(data) == 'table' then return data end
+    return {}
+end
+
+local function _JsonWrite(tbl)
+    local ok, encoded = pcall(json.encode, tbl)
+    if not ok then return false end
+    return SaveResourceFile(GetCurrentResourceName(), OVERRIDES_JSON, encoded, -1) and true or false
+end
+
+-- Aplica un override {enabled, punishment, banDuration} sobre Config en runtime.
+local function _ApplyOverrideToConfig(name, ov)
+    local settings = _FindDetectionSection(name)
+    if not settings then return false end
+    if ov.enabled ~= nil then settings.enabled = ov.enabled and true or false end
+    if ov.punishment ~= nil and ov.punishment ~= '' then settings.punishment = ov.punishment end
+    if ov.banDuration ~= nil and ov.banDuration ~= '' then settings.banDuration = ov.banDuration end
+    return true
+end
+
+-- Notifica a los clientes conectados el cambio (live, sin reinicio).
+local function _PushToClients(entries)
+    if type(entries) ~= 'table' or not next(entries) then return end
+    TriggerClientEvent('lyxguard:updateDetectionConfig', -1, entries)
+end
+
+-- Guarda overrides segun el modo elegido (database / json / off).
+local function _SaveOverrides(list, updatedBy)
+    local mode = _PersistMode()
+    if mode == 'off' then return true end
+
+    if mode == 'json' then
+        local data = _JsonRead()
+        data.detections = data.detections or {}
+        for name, ov in pairs(list) do
+            data.detections[name] = {
+                enabled = ov.enabled,
+                punishment = ov.punishment,
+                banDuration = ov.banDuration
+            }
+        end
+        return _JsonWrite(data)
+    end
+
+    -- database
+    for name, ov in pairs(list) do
+        MySQL.Async.execute([[
+            INSERT INTO lyxguard_config_overrides (detection_name, enabled, punishment, ban_duration, updated_by)
+            VALUES (@n, @e, @p, @b, @by)
+            ON DUPLICATE KEY UPDATE enabled=@e, punishment=@p, ban_duration=@b, updated_by=@by
+        ]], {
+            ['@n'] = name,
+            ['@e'] = ov.enabled and 1 or 0,
+            ['@p'] = ov.punishment,
+            ['@b'] = ov.banDuration,
+            ['@by'] = updatedBy or 'panel'
+        })
+    end
+    return true
+end
+
+local function _SaveMeta(key, value)
+    local mode = _PersistMode()
+    if mode == 'off' then return end
+    if mode == 'json' then
+        local data = _JsonRead()
+        data.meta = data.meta or {}
+        data.meta[key] = value
+        _JsonWrite(data)
+        return
+    end
+    MySQL.Async.execute([[
+        INSERT INTO lyxguard_config_meta (meta_key, meta_value) VALUES (@k, @v)
+        ON DUPLICATE KEY UPDATE meta_value=@v
+    ]], { ['@k'] = key, ['@v'] = tostring(value) })
+end
+
+-- Carga overrides persistidos y los aplica a Config al arrancar.
+local function _LoadAndApplyOverrides()
+    local mode = _PersistMode()
+    if mode == 'off' then return end
+
+    if mode == 'json' then
+        local data = _JsonRead()
+        local dets = data.detections or {}
+        local pushed = {}
+        for name, ov in pairs(dets) do
+            if _ApplyOverrideToConfig(name, ov) then
+                pushed[#pushed + 1] = { name = name, enabled = ov.enabled, punishment = ov.punishment, banDuration = ov.banDuration }
+            end
+        end
+        if #pushed > 0 then _PushToClients(pushed) end
+        print(('^2[LyxGuard]^7 admin_config: %d overrides (json) aplicados.'):format(#pushed))
+        return
+    end
+
+    -- database
+    MySQL.Async.fetchAll('SELECT detection_name, enabled, punishment, ban_duration FROM lyxguard_config_overrides', {}, function(rows)
+        if not rows then return end
+        local pushed = {}
+        for _, r in ipairs(rows) do
+            local ov = {
+                enabled = (tonumber(r.enabled) or 0) == 1,
+                punishment = r.punishment,
+                banDuration = r.ban_duration
+            }
+            if _ApplyOverrideToConfig(r.detection_name, ov) then
+                pushed[#pushed + 1] = { name = r.detection_name, enabled = ov.enabled, punishment = ov.punishment, banDuration = ov.banDuration }
+            end
+        end
+        if #pushed > 0 then _PushToClients(pushed) end
+        print(('^2[LyxGuard]^7 admin_config: %d overrides (db) aplicados.'):format(#pushed))
+    end)
+end
+
+-- Aplicar overrides persistidos poco despues del arranque (deja que migraciones corran).
+CreateThread(function()
+    Wait(8000)
+    local ok, err = pcall(_LoadAndApplyOverrides)
+    if not ok then
+        print('^3[LyxGuard]^7 admin_config: no se pudieron cargar overrides: ' .. tostring(err))
+    end
+end)
+
+-- ── CALLBACKS ─────────────────────────────────────────────────────────────────
+
+-- Devuelve TODAS las detecciones (lista plana agrupada) para la UI dinamica.
+RegisterESXCallback('lyxguard:panel:getAllDetections', function(source, cb)
+    local xPlayer = ESX.GetPlayerFromId(source)
+    if not xPlayer then return cb({ detections = {} }) end
+
+    local group = xPlayer.getGroup()
+    if not (group == 'admin' or group == 'superadmin' or group == 'owner' or group == 'master') then
+        return cb({ detections = {} })
+    end
+
+    local detections = {}
+    for _, sec in ipairs(DETECTION_SECTIONS) do
+        local t = Config and Config[sec.key]
+        if type(t) == 'table' then
+            for name, settings in pairs(t) do
+                if type(settings) == 'table' and settings.enabled ~= nil then
+                    detections[#detections + 1] = {
+                        name = name,
+                        group = sec.group,
+                        label = _Humanize(name),
+                        enabled = settings.enabled and true or false,
+                        punishment = settings.punishment or 'notify',
+                        banDuration = settings.banDuration or 'medium'
+                    }
+                end
+            end
+        end
+    end
+
+    cb({
+        detections = detections,
+        preset = (Config and Config.Preset) or 'estricto',
+        persistence = _PersistMode()
+    })
+end)
+
+-- Compat: callback antiguo (enabled/punishment por nombre) — se mantiene para no romper.
 RegisterESXCallback('lyxguard:panel:getDetectionSettings', function(source, cb)
     local xPlayer = ESX.GetPlayerFromId(source)
     if not xPlayer then return cb({ detections = {} }) end
-    
-    -- Build detection settings from Config
+
     local detections = {}
-    
-    -- Movement detections
-    if Config and Config.Movement then
-        for name, settings in pairs(Config.Movement) do
-            if type(settings) == 'table' and settings.enabled ~= nil then
-                detections[name] = {
-                    enabled = settings.enabled,
-                    punishment = settings.punishment or 'notify'
-                }
+    for _, sec in ipairs(DETECTION_SECTIONS) do
+        local t = Config and Config[sec.key]
+        if type(t) == 'table' then
+            for name, settings in pairs(t) do
+                if type(settings) == 'table' and settings.enabled ~= nil then
+                    detections[name] = {
+                        enabled = settings.enabled,
+                        punishment = settings.punishment or 'notify'
+                    }
+                end
             end
         end
     end
-    
-    -- Combat detections
-    if Config and Config.Combat then
-        for name, settings in pairs(Config.Combat) do
-            if type(settings) == 'table' and settings.enabled ~= nil then
-                detections[name] = {
-                    enabled = settings.enabled,
-                    punishment = settings.punishment or 'notify'
-                }
-            end
-        end
-    end
-    
-    -- Entity detections
-    if Config and Config.Entities then
-        for name, settings in pairs(Config.Entities) do
-            if type(settings) == 'table' and settings.enabled ~= nil then
-                detections[name] = {
-                    enabled = settings.enabled,
-                    punishment = settings.punishment or 'notify'
-                }
-            end
-        end
-    end
-    
-    -- Advanced detections
-    if Config and Config.Advanced then
-        for name, settings in pairs(Config.Advanced) do
-            if type(settings) == 'table' and settings.enabled ~= nil then
-                detections[name] = {
-                    enabled = settings.enabled,
-                    punishment = settings.punishment or 'notify'
-                }
-            end
-        end
-    end
-    
-    -- Override with runtime settings if any
-    for name, settings in pairs(RuntimeConfig.detectionSettings) do
-        detections[name] = settings
-    end
-    
     cb({ detections = detections })
+end)
+
+-- Devuelve los castigos que aplicaria un preset a cada deteccion (para "Aplicar preset").
+RegisterESXCallback('lyxguard:panel:getPresetPunishments', function(source, cb, data)
+    local xPlayer = ESX.GetPlayerFromId(source)
+    if not xPlayer then return cb({ punishments = {} }) end
+
+    local presetName = (data and tostring(data.preset)) or 'estricto'
+    local punishments = {}
+
+    if LyxGuardEasy and LyxGuardEasy.ResolvePunishment then
+        for _, sec in ipairs(DETECTION_SECTIONS) do
+            local t = Config and Config[sec.key]
+            if type(t) == 'table' then
+                for name, settings in pairs(t) do
+                    if type(settings) == 'table' and settings.enabled ~= nil then
+                        local p = LyxGuardEasy.ResolvePunishment(presetName, name)
+                        if p then
+                            punishments[name] = { punishment = p.punishment, banDuration = p.banDuration }
+                        end
+                    end
+                end
+            end
+        end
+    end
+
+    cb({ punishments = punishments })
 end)
 
 RegisterESXCallback('lyxguard:panel:saveDetectionSettings', function(source, cb, data)
     local xPlayer = ESX.GetPlayerFromId(source)
     if not xPlayer then return cb({ success = false }) end
-    
+
     local group = xPlayer.getGroup()
     if not (group == 'admin' or group == 'superadmin' or group == 'owner') then
         return cb({ success = false, message = 'Sin permisos' })
     end
-    
+
     if not data or not data.detections then
         return cb({ success = false, message = 'Datos inválidos' })
     end
-    
-    -- Update runtime config
+
+    local overrides = {}
+    local pushList = {}
+
     for name, settings in pairs(data.detections) do
-        RuntimeConfig.detectionSettings[name] = settings
-        
-        -- Also update Config if available
-        -- Movement
-        if Config and Config.Movement and Config.Movement[name] then
-            Config.Movement[name].enabled = settings.enabled
-            Config.Movement[name].punishment = settings.punishment
-        end
-        -- Combat
-        if Config and Config.Combat and Config.Combat[name] then
-            Config.Combat[name].enabled = settings.enabled
-            Config.Combat[name].punishment = settings.punishment
-        end
-        -- Entities
-        if Config and Config.Entities and Config.Entities[name] then
-            Config.Entities[name].enabled = settings.enabled
-            Config.Entities[name].punishment = settings.punishment
-        end
-        -- Advanced
-        if Config and Config.Advanced and Config.Advanced[name] then
-            Config.Advanced[name].enabled = settings.enabled
-            Config.Advanced[name].punishment = settings.punishment
+        local target = _FindDetectionSection(name)
+        if target then
+            local enabled = settings.enabled and true or false
+            local punishment = settings.punishment or target.punishment
+            local banDuration = settings.banDuration or target.banDuration
+
+            -- Aplicar en runtime
+            target.enabled = enabled
+            target.punishment = punishment
+            if banDuration then target.banDuration = banDuration end
+
+            overrides[name] = { enabled = enabled, punishment = punishment, banDuration = banDuration }
+            pushList[#pushList + 1] = { name = name, enabled = enabled, punishment = punishment, banDuration = banDuration }
+
+            -- Guardar tambien en RuntimeConfig (compat con GetRuntimeConfig)
+            RuntimeConfig.detectionSettings[name] = { enabled = enabled, punishment = punishment }
         end
     end
-    
-    print(('[LyxGuard] %s updated detection settings'):format(xPlayer.getName()))
-    
-    cb({ success = true })
+
+    -- Persistir segun modo
+    local okPersist = _SaveOverrides(overrides, xPlayer.getName())
+
+    -- Guardar preset elegido (si vino)
+    if data.preset then
+        if Config then Config.Preset = data.preset end
+        _SaveMeta('preset', data.preset)
+    end
+
+    -- Re-push live a clientes conectados
+    _PushToClients(pushList)
+
+    print(('^2[LyxGuard]^7 %s actualizó %d detecciones (persist=%s)'):format(
+        xPlayer.getName(), #pushList, _PersistMode()
+    ))
+
+    cb({ success = okPersist ~= false, persisted = _PersistMode() })
 end)
 
 RegisterESXCallback('lyxguard:panel:resetDetectionDefaults', function(source, cb)
     local xPlayer = ESX.GetPlayerFromId(source)
     if not xPlayer then return cb({ success = false }) end
-    
+
     local group = xPlayer.getGroup()
     if not (group == 'admin' or group == 'superadmin' or group == 'owner') then
         return cb({ success = false, message = 'Sin permisos' })
     end
-    
-    -- Clear runtime overrides
+
+    -- Limpiar overrides en runtime y persistencia
     RuntimeConfig.detectionSettings = {}
-    
-    print(('[LyxGuard] %s reset detection settings to defaults'):format(xPlayer.getName()))
-    
-    cb({ success = true })
+
+    local mode = _PersistMode()
+    if mode == 'database' then
+        MySQL.Async.execute('DELETE FROM lyxguard_config_overrides', {})
+    elseif mode == 'json' then
+        local d = _JsonRead()
+        d.detections = {}
+        _JsonWrite(d)
+    end
+
+    print(('^2[LyxGuard]^7 %s reseteó overrides de detecciones (persist=%s). Reinicia el recurso para recargar defaults del config.'):format(
+        xPlayer.getName(), mode
+    ))
+
+    cb({ success = true, message = 'Overrides borrados. Reinicia el recurso para aplicar los defaults del config.' })
 end)
 
 -- ═══════════════════════════════════════════════════════════════════════════════

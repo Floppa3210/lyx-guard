@@ -159,7 +159,19 @@ Guia completa:
 - `docs/INSTALL_SERVER.md`
 
 ## Configuracion (entry points)
-Archivo: `config.lua`
+
+**Configuración fácil (recomendado):** `config_easy.lua` — boolean-first, con presets.
+```lua
+Config.Preset = 'estricto'          -- estricto (recom.) | balanceado | suave | custom | manual
+Config.Easy   = { godMode = true, vehicleSpawn = true, ... }  -- on/off por detección
+Config.PanelPersistence = 'database' -- database (recom.) | json | off
+```
+En preset `estricto`, los cheats claros (spawn vehículo/arma ilegal, aimbot, injection,
+godmode, modelExploit, honeypots) vienen preconfigurados a **ban permanente**. Con
+`Config.Preset='custom'` decidís el castigo de cada detección en `Config.CustomPreset`.
+El panel de admin edita todas las detecciones en vivo y persiste los cambios.
+
+**Configuración avanzada:** `config.lua` (umbrales, listas, intervalos).
 
 Perfil runtime:
 ```lua
@@ -200,6 +212,7 @@ node tools/qa/check_events.js
 lyx-guard/
   fxmanifest.lua
   config.lua
+  config_easy.lua       # configuración fácil: presets + on/off + persistencia
   README.md
   LICENSE
   SECURITY.md

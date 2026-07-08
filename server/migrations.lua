@@ -279,6 +279,33 @@ local MIGRATIONS = {
             _EnsureColumn('lyxguard_risk_profiles', 'last_alert_ms',
                 'ALTER TABLE lyxguard_risk_profiles ADD COLUMN last_alert_ms BIGINT UNSIGNED NOT NULL DEFAULT 0 AFTER last_action_ms')
         end
+    },
+    {
+        version = 4,
+        name = 'panel_config_overrides',
+        up = function()
+            -- Overrides de detecciones editados desde el panel (persistencia opcional).
+            -- Cada fila = una deteccion con su enabled/punishment/banDuration.
+            _Exec([[
+                CREATE TABLE IF NOT EXISTS lyxguard_config_overrides (
+                    detection_name VARCHAR(100) NOT NULL PRIMARY KEY,
+                    enabled TINYINT(1) NOT NULL DEFAULT 1,
+                    punishment VARCHAR(32) DEFAULT NULL,
+                    ban_duration VARCHAR(32) DEFAULT NULL,
+                    updated_by VARCHAR(100) DEFAULT NULL,
+                    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+            ]])
+
+            -- Preset global activo (una sola fila, key = 'preset').
+            _Exec([[
+                CREATE TABLE IF NOT EXISTS lyxguard_config_meta (
+                    meta_key VARCHAR(64) NOT NULL PRIMARY KEY,
+                    meta_value VARCHAR(255) DEFAULT NULL,
+                    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+            ]])
+        end
     }
 }
 
